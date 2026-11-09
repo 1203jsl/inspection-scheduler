@@ -54,7 +54,7 @@ export const FIELD_LABEL: Record<string, string> = {
   requestedDate: '검수 희망일', requestedTime: '희망 시간', location: '검수 장소(신청)',
   contactName: '업체 담당자', contactPhone: '연락처', contactEmail: '이메일', note: '비고',
   'schedule.date': '검수일', 'schedule.time': '검수 시간', 'schedule.location': '검수 장소',
-  'schedule.inspectorId': '검수자', status: '상태',
+  'schedule.inspectorId': '검수자', status: '상태', conflict: '충돌 강제 진행',
 };
 
 function clone(i: Inspection): Inspection {
@@ -107,6 +107,34 @@ function assertSchedule(i: Inspection, s: Schedule, inspectors: Inspector[]) {
   if (msgs.length) throw new WorkflowError(`${i.id}: ${msgs.join(' ')}`);
 }
 
+// ───────── 충돌 강제 진행 ─────────
+
+/** 충돌이 있는데 진행할 때: 걸린 충돌과 사유 */
+export interface ForceInfo {
+  conflicts: string[];
+  reason: string;
+}
+
+/**
+ * 충돌이 있으면 강제 진행 허용 여부와 사유를 확인합니다.
+ * 통과하면 이력에 남길 ForceInfo(충돌 없으면 undefined)를 돌려줍니다.
+ */
+export function checkForce(id: string, conflicts: string[], allowForce: boolean, reason: string | undefined): ForceInfo | undefined {
+  if (conflicts.length === 0) return undefined;
+  if (!allowForce) {
+    throw new WorkflowError(`${id}: 충돌 조건에 걸립니다 (${conflicts.join(' / ')}). 설정에서 강제 진행이 꺼져 있어 진행할 수 없습니다. 날짜나 검수자를 바꾸세요.`);
+  }
+  if (!reason?.trim()) {
+    throw new WorkflowError(`${id}: 충돌 조건에 걸립니다 (${conflicts.join(' / ')}). 강제로 진행하려면 사유를 입력하세요.`);
+  }
+  return { conflicts, reason: reason.trim() };
+}
+
+function recordForce(i: Inspection, f: ForceInfo | undefined, actor: Actor, now: Date) {
+  if (!f) return;
+  i.history.push(entry(actor, now, { action: 'force', field: 'conflict', to: f.conflicts.join(' / '), reason: f.reason }));
+}
+
 // ───────── 동작 ─────────
 
 export function startNegotiation(insp: Inspection, actor: Actor, now: Date): Inspection {
@@ -117,10 +145,11 @@ export function startNegotiation(insp: Inspection, actor: Actor, now: Date): Ins
 }
 
 /** 확정 (재확정 포함). reason: 충돌 강제 진행 사유 등 (4단계) */
-export function confirm(insp: Inspection, s: Schedule, inspectors: Inspector[], actor: Actor, now: Date, reason?: string): Inspection {
+export function confirm(insp: Inspection, s: Schedule, inspectors: Inspector[], actor: Actor, now: Date, reason?: string, force?: ForceInfo): Inspection {
   ensure(insp, 'confirm');
   assertSchedule(insp, s, inspectors);
   const i = clone(insp);
+  recordForce(i, force, actor, now);
   setSchedule(i, s, actor, now, reason);
   setStatus(i, 'confirmed', actor, now, reason ?? (insp.status === 'changed' ? '재확정' : undefined));
   i.confirmedAt = now.toISOString();
@@ -129,13 +158,14 @@ export function confirm(insp: Inspection, s: Schedule, inspectors: Inspector[], 
 }
 
 /** 확정 뒤 일정 변경 → '변경됨'(재확정 필요) */
-export function change(insp: Inspection, s: Schedule, inspectors: Inspector[], reason: string, actor: Actor, now: Date): Inspection {
+export function change(insp: Inspection, s: Schedule, inspectors: Inspector[], reason: string, actor: Actor, now: Date, force?: ForceInfo): Inspection {
   ensure(insp, 'change');
   assertSchedule(insp, s, inspectors);
   const same = (['date', 'time', 'location', 'inspectorId'] as const).every((k) => (insp.schedule[k] ?? '') === (s[k] ?? ''));
   if (same) throw new WorkflowError(`${insp.id}: 바뀐 내용이 없습니다. 검수일·시간·장소·검수자 중 하나 이상을 바꾸세요.`);
   const i = clone(insp);
   const r = reason.trim() || undefined;
+  recordForce(i, force, actor, now);
   setSchedule(i, s, actor, now, r);
   setStatus(i, 'changed', actor, now, r);
   return i;

@@ -1,7 +1,8 @@
 import { useState } from 'react';
 import type { AppErrorInfo, Inspection, Inspector, RequestFields, Schedule, Vendor } from '../shared/types';
 import { normalizeTime } from '../shared/dates';
-import { checkSchedule, WorkflowError } from '../shared/workflow';
+import { conflictsFor, toSlot } from '../shared/conflicts';
+import { checkForce, checkSchedule, WorkflowError, type ForceInfo } from '../shared/workflow';
 import { Alert, Dialog, ErrorAlert, Icon } from './components';
 import { useApp, useEditLock } from './ctx';
 
@@ -40,10 +41,10 @@ export function ScheduleDialog({ mode, insp, onClose, onSubmit }: {
   mode: 'confirm' | 'change';
   insp: Inspection;
   onClose: () => void;
-  onSubmit: (s: Schedule, reason: string) => Promise<AppErrorInfo | 'handled' | null>;
+  onSubmit: (s: Schedule, reason: string, force?: ForceInfo) => Promise<AppErrorInfo | 'handled' | null>;
 }) {
   useEditLock(true);
-  const { data } = useApp();
+  const { data, inspectorName } = useApp();
   const inspectors = data.inspectors.items;
   const [s, setS] = useState<Schedule>({ ...insp.schedule });
   const [reason, setReason] = useState('');
@@ -55,12 +56,25 @@ export function ScheduleDialog({ mode, insp, onClose, onSubmit }: {
   const reconfirm = mode === 'confirm' && insp.status === 'changed';
   const title = mode === 'change' ? '일정 변경' : reconfirm ? '일정 재확정' : '일정 확정';
 
+  // 충돌 조건 (입력할 때마다 다시 검사)
+  const rules = data.settings.conflictRules;
+  const [forceOn, setForceOn] = useState(false);
+  const [forceReason, setForceReason] = useState('');
+  const fixedTime = s.time ? normalizeTime(s.time) ?? s.time : s.time;
+  const conflicts = rules
+    ? conflictsFor(toSlot({ ...insp, schedule: { ...s, time: fixedTime } }), data.inspections.items.map(toSlot), rules, (id) => inspectorName(id)).map((c) => c.message)
+    : [];
+  const blocked = conflicts.length > 0 && !rules.allowForce;
+  const needReason = conflicts.length > 0 && forceOn && tried && !forceReason.trim();
+
   const submit = () => {
     setTried(true);
-    const fixed = { ...s, time: s.time ? normalizeTime(s.time) ?? s.time : s.time };
+    const fixed = { ...s, time: fixedTime };
     if (Object.keys(checkSchedule(fixed, inspectors)).length) { setS(fixed); return; }
-    run(() => onSubmit(fixed, reason));
+    if (conflicts.length && (blocked || !forceOn || !forceReason.trim())) return;
+    run(async () => onSubmit(fixed, reason, checkForce(insp.id, conflicts, rules.allowForce, forceReason)));
   };
+  const verb = mode === 'change' ? '변경' : reconfirm ? '재확정' : '확정';
 
   return (
     <Dialog
@@ -68,7 +82,9 @@ export function ScheduleDialog({ mode, insp, onClose, onSubmit }: {
       width={560}
       footer={<>
         <button className="btn" type="button" onClick={onClose}>닫기</button>
-        <button className="btn btn-primary" type="button" onClick={submit} disabled={busy}>{mode === 'change' ? '변경' : '확정'}</button>
+        <button className="btn btn-primary" type="button" onClick={submit} disabled={busy || blocked || (conflicts.length > 0 && !forceOn)}>
+          {conflicts.length && forceOn ? `강제 진행하여 ${verb}` : verb}
+        </button>
       </>}
     >
       <p className="help" style={{ margin: 0 }}>{insp.id} · {insp.vendorName} · {insp.itemName} · 수량 {insp.quantity ?? '-'}</p>
@@ -97,12 +113,37 @@ export function ScheduleDialog({ mode, insp, onClose, onSubmit }: {
           <label htmlFor="si">검수자 <span className="req">*</span></label>
           <select id="si" className={`sel${show('inspectorId') ? ' invalid' : ''}`} value={s.inspectorId ?? ''} onChange={(e) => setS({ ...s, inspectorId: e.target.value || null })}>
             <option value="">선택하세요</option>
-            {active.map((p) => <option key={p.id} value={p.id}>{p.name} ({p.dept}){p.active ? '' : ' · 사용 안 함'}</option>)}
+            {active.map((p) => <option key={p.id} value={p.id}>{p.name}{p.dept ? ` (${p.dept})` : ''}{p.active ? '' : ' · 사용 안 함'}</option>)}
           </select>
           <FieldErr msg={show('inspectorId')} />
           {inspectors.length === 0 && <span className="help">검수자 관리 화면에서 먼저 검수자를 추가하세요.</span>}
         </div>
       </div>
+      {conflicts.length > 0 && (
+        <div className={`alert ${blocked ? 'alert-danger' : 'alert-warn'}`} role="status" style={{ flexDirection: 'column', gap: 4 }}>
+          <span style={{ display: 'flex', gap: 8, alignItems: 'center' }}><Icon name="warn" /><b>충돌 조건 {conflicts.length}건에 걸립니다</b></span>
+          {conflicts.map((c) => <span key={c}>· {c}</span>)}
+          <span>{blocked
+            ? '설정에서 강제 진행이 꺼져 있어 진행할 수 없습니다. 다른 날짜나 검수자를 고르세요.'
+            : '다른 날짜나 검수자를 고르거나, 꼭 필요하면 사유를 적고 강제로 진행하세요.'}</span>
+        </div>
+      )}
+      {conflicts.length > 0 && !blocked && (
+        <>
+          <label className="switch-row" style={{ fontSize: 14 }}>
+            <input type="checkbox" className="chk" checked={forceOn} onChange={(e) => setForceOn(e.target.checked)} />
+            충돌을 확인했으며 강제로 진행합니다
+          </label>
+          {forceOn && (
+            <div className="field">
+              <label htmlFor="fr">강제 진행 사유 <span className="req">*</span></label>
+              <textarea id="fr" className={`input${needReason ? ' invalid' : ''}`} style={{ minHeight: 64 }} value={forceReason}
+                onChange={(e) => setForceReason(e.target.value)} placeholder="예: 업체 장비 반출 일정상 이 날 외 불가. 팀장 승인" />
+              {needReason ? <FieldErr msg="강제 진행 사유를 입력하세요." /> : <span className="help">걸린 충돌 조건과 함께 변경 이력에 기록됩니다.</span>}
+            </div>
+          )}
+        </>
+      )}
       {mode === 'change' && (
         <div className="field">
           <label htmlFor="sr">변경 사유</label>

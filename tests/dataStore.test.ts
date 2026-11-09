@@ -4,6 +4,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { DataStore } from '../src/main/core/dataStore';
 import { AppError } from '../src/main/core/errors';
+import { CURRENT_SCHEMA } from '../src/main/core/schema';
 
 const KIM = { account: 'kim.mj', displayName: '김민준' };
 const LEE = { account: 'lee.sy', displayName: '이서연' };
@@ -33,7 +34,7 @@ describe('데이터 폴더 만들기·확인', () => {
       expect((await fs.stat(path.join(dir, d))).isDirectory()).toBe(true);
     }
     const s = JSON.parse(await fs.readFile(path.join(dir, 'data/settings.json'), 'utf8'));
-    expect(s.schemaVersion).toBe(2);
+    expect(s.schemaVersion).toBe(CURRENT_SCHEMA.settings);
     expect(s.revision).toBe(0);
     expect(s.userMap).toEqual({ 'kim.mj': '김민준' });
     const chk = await DataStore.checkFolder(dir);

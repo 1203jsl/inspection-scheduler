@@ -1,4 +1,5 @@
 import type { DataFileKey, DataFiles, ExcelTemplateDef, FileMeta, Settings } from '../../shared/types';
+import { DEFAULT_CONFLICT_RULES } from '../../shared/conflicts';
 import { AppError } from './errors';
 
 /** 이 프로그램이 이해하는 최신 구조 버전 (파일별) */
@@ -6,7 +7,7 @@ export const CURRENT_SCHEMA: Record<DataFileKey, number> = {
   inspections: 2,
   vendors: 1,
   inspectors: 1,
-  settings: 2,
+  settings: 3,
   mail_log: 1,
 };
 
@@ -62,6 +63,8 @@ export const MIGRATIONS: Partial<Record<DataFileKey, Record<number, Migration>>>
       excelTemplates: d.excelTemplates ?? [TEMPLATE_V1],
       currentTemplate: d.currentTemplate ?? 'v1',
     }),
+    // v2 → v3: 충돌 조건 추가
+    2: (d) => ({ ...d, schemaVersion: 3, conflictRules: d.conflictRules ?? structuredClone(DEFAULT_CONFLICT_RULES) }),
   },
 };
 
@@ -78,6 +81,7 @@ export function defaultSettings(user: string, name: string, now: string): Settin
     inspectionItems: [...DEFAULT_INSPECTION_ITEMS],
     excelTemplates: [TEMPLATE_V1],
     currentTemplate: 'v1',
+    conflictRules: structuredClone(DEFAULT_CONFLICT_RULES),
   };
 }
 

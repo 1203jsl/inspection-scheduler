@@ -12,7 +12,7 @@ import { buildPreviewRows, finalizePreview, nextId, normalizeId } from '../src/m
 import { ImportService } from '../src/main/core/importService';
 import { DataStore } from '../src/main/core/dataStore';
 import { AppError } from '../src/main/core/errors';
-import { defaultSettings, migrate, TEMPLATE_V1, DEFAULT_INSPECTION_ITEMS } from '../src/main/core/schema';
+import { CURRENT_SCHEMA, defaultSettings, migrate, TEMPLATE_V1, DEFAULT_INSPECTION_ITEMS } from '../src/main/core/schema';
 import { freeformFile, MIXED_ROWS, NORMAL_ROWS, REVISION_ROWS, vendorReply } from './fixtures';
 
 const settings: Settings = defaultSettings('hong.gd', '홍길동', '2026-11-09T00:00:00Z');
@@ -294,10 +294,10 @@ describe('가져오기 전체 흐름 (폴더에 저장)', () => {
 });
 
 describe('설정 구조 변환', () => {
-  it('1단계에서 만든 settings(v1)는 v2로 바뀌며 양식·품목 기본값이 생긴다', () => {
+  it('1단계에서 만든 settings(v1)는 최신 구조로 바뀌며 양식·품목 기본값이 생긴다', () => {
     const v1 = { schemaVersion: 1, revision: 4, updatedBy: 'a', updatedByName: 'A', updatedAt: '', userMap: {}, lockStaleMinutes: 30, backupKeep: 50 };
     const v2 = migrate('settings', v1);
-    expect(v2.schemaVersion).toBe(2);
+    expect(v2.schemaVersion).toBe(CURRENT_SCHEMA.settings);
     expect(v2.revision).toBe(4);
     expect(v2.inspectionItems).toEqual(DEFAULT_INSPECTION_ITEMS);
     expect(v2.excelTemplates[0].version).toBe('v1');

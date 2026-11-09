@@ -4,7 +4,8 @@ import type { DataFiles, ImportPreview, ImportSummary, PreviewFile, PreviewRow }
 import { DataStore, DIRS } from './dataStore';
 import { AppError, toErrorInfo } from './errors';
 import { readWorkbook } from './excel/read';
-import { applyImport, buildPreviewRows, finalizePreview, originalFileName } from './importer';
+import { applyImport, buildPreviewRows, finalizePreview, originalFileName, type ValidateContext } from './importer';
+import { importConflicts } from './importConflicts';
 
 const pad = (n: number) => String(n).padStart(2, '0');
 export const ymd = (d: Date) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
@@ -34,7 +35,13 @@ export class ImportService {
     const settings = await this.store.load('settings');
     const inspections = await this.store.load('inspections');
     const vendors = await this.store.load('vendors');
-    const ctx = { settings, existing: inspections.items, today: ymd(this.now()) };
+    const inspectors = await this.store.load('inspectors');
+    const ctx: ValidateContext = {
+      settings,
+      existing: inspections.items,
+      today: ymd(this.now()),
+      checkConflicts: (rows) => importConflicts(rows, inspections.items, settings, inspectors.items),
+    };
 
     const files: PreviewFile[] = [];
     const buffers: Buffer[] = [];

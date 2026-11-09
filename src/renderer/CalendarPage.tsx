@@ -2,6 +2,8 @@ import { useMemo, useState } from 'react';
 import type { Inspection } from '../shared/types';
 import { addDays, addMonths, monthEnd, monthStart, parseYmd, weekStart } from '../shared/dates';
 import { statusBadge } from '../shared/workflow';
+import { conflictMap, toSlot } from '../shared/conflicts';
+import { Icon } from './components';
 import { useApp } from './ctx';
 
 const HEAD = ['월', '화', '수', '목', '금', '토', '일'];
@@ -40,6 +42,9 @@ export function CalendarPage({ initialDate }: { initialDate?: string }) {
     for (const l of m.values()) l.sort((a, b) => (a.schedule.time ?? '').localeCompare(b.schedule.time ?? ''));
     return m;
   }, [items, vendor, insp, status]);
+
+  // 충돌 판정은 필터와 상관없이 전체 일정 기준
+  const cmap = useMemo(() => conflictMap(items.map(toSlot), data.settings.conflictRules, inspectorName), [items, data.settings.conflictRules, inspectorName]);
 
   const days = useMemo(() => {
     if (view === 'week') {
@@ -103,7 +108,9 @@ export function CalendarPage({ initialDate }: { initialDate?: string }) {
           const list = byDay.get(d) ?? [];
           const out = view === 'month' && d.slice(0, 7) !== month;
           const shown = view === 'month' ? list.slice(0, MAX_IN_MONTH) : list;
-          const cls = ['cal-c', out ? 'out' : '', d === today ? 'today' : ''].filter(Boolean).join(' ');
+          const conf = cmap.get(d) ?? [];
+          const confIds = new Set(conf.flatMap((c) => c.ids));
+          const cls = ['cal-c', out ? 'out' : '', d === today ? 'today' : '', conf.length ? 'conf' : ''].filter(Boolean).join(' ');
           const n = parseYmd(d).getDate();
           return (
             <div key={d} className={cls} role="gridcell" style={view === 'week' ? { minHeight: 480 } : undefined}>
@@ -111,6 +118,12 @@ export function CalendarPage({ initialDate }: { initialDate?: string }) {
                 <button type="button" style={plainBtn} onClick={() => openDay(d)} aria-label={`${d} 검수 목록 보기 (${list.length}건)`}>
                   {d === today ? <b>{n}</b> : n}
                 </button>
+                {conf.length > 0 && (
+                  <span className="cell-flag" title={conf.map((c) => c.message).join('\n')}>
+                    <Icon name="warn" />충돌 {confIds.size}건
+                    <span className="sr-only">{conf.map((c) => c.message).join(' / ')}</span>
+                  </span>
+                )}
               </div>
               {shown.map((i) => {
                 const b = statusBadge(i);

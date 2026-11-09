@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react';
 import type { AppErrorInfo, Inspection, InspectionStatus } from '../shared/types';
 import { addDays, addMonths, fmtMD, monthEnd, monthStart, weekStart } from '../shared/dates';
 import { assignInspector, cancel, confirm, resultMissing, startNegotiation, statusBadge, WorkflowError } from '../shared/workflow';
+import { conflictMap, conflictsFor, toSlot } from '../shared/conflicts';
 import { Alert, ErrorAlert, Icon } from './components';
 import { useApp, type ListPreset } from './ctx';
 import { CancelDialog } from './dialogs';
@@ -57,6 +58,9 @@ export function ListPage({ preset }: { preset?: ListPreset }) {
   }, [period, today, day]);
 
   const vendors = useMemo(() => [...new Set(items.map((i) => i.vendorName).filter(Boolean))].sort(), [items]);
+  const rules = data.settings.conflictRules;
+  const cmap = useMemo(() => conflictMap(items.map(toSlot), rules, inspectorName), [items, rules, inspectorName]);
+  const conflictOf = (i: Inspection) => (i.schedule.date ? (cmap.get(i.schedule.date) ?? []).filter((c) => c.ids.includes(i.id)).map((c) => c.message) : []);
 
   const rows = useMemo(() => {
     const kw = q.trim().toLowerCase();
@@ -121,7 +125,13 @@ export function ListPage({ preset }: { preset?: ListPreset }) {
       try {
         if (bulkInsp) x = assignInspector(x, bulkInsp, inspectors, actor, now);
         if (bulkStatus === 'negotiating') x = startNegotiation(x, actor, now);
-        if (bulkStatus === 'confirmed') x = confirm(x, { ...x.schedule }, inspectors, actor, now);
+        if (bulkStatus === 'confirmed') {
+          // 일괄 확정은 강제 진행 없이: 충돌이 있으면 건너뜀 (이미 처리한 건을 반영한 상태로 검사)
+          const working = items.map((w) => changed.get(w.id) ?? w).filter((w) => w.id !== x.id).map(toSlot);
+          const cs = conflictsFor(toSlot(x), working, rules, inspectorName).map((c) => c.message);
+          if (cs.length) throw new WorkflowError(`${x.id}: 충돌 조건에 걸려 건너뜀 (${cs.join(' / ')}). 상세 화면에서 사유를 적고 강제 진행할 수 있습니다.`);
+          x = confirm(x, { ...x.schedule }, inspectors, actor, now);
+        }
         if (bulkStatus === 'canceled') x = cancel(x, cancelReason ?? '', actor, now);
         if (x !== it) changed.set(x.id, x);
       } catch (e) {
@@ -262,7 +272,16 @@ export function ListPage({ preset }: { preset?: ListPreset }) {
                   <td title={i.itemName}>{i.itemName}</td>
                   <td title={i.spec}>{i.spec}</td>
                   <td className="num">{i.quantity ?? ''}</td>
-                  <td>{fmtMD(i.schedule.date)}</td>
+                  {(() => {
+                    const cs = conflictOf(i);
+                    if (!cs.length) return <td>{fmtMD(i.schedule.date)}</td>;
+                    return (
+                      <td className="cell-warn">
+                        <span className="cell-flag" title={cs.map((c) => `충돌: ${c}`).join('\n')}><Icon name="warn" />{fmtMD(i.schedule.date)} 충돌</span>
+                        <span className="sr-only">{cs.join(' / ')}</span>
+                      </td>
+                    );
+                  })()}
                   <td>{i.schedule.time ?? ''}</td>
                   <td>{i.schedule.location}</td>
                   <td>{i.schedule.inspectorId ? inspectorName(i.schedule.inspectorId) : <span className="muted">(미배정)</span>}</td>

@@ -159,10 +159,10 @@ export function DetailPage({ id, from }: { id: string; from?: Route }) {
           mode={dlg}
           insp={insp}
           onClose={() => setDlg(null)}
-          onSubmit={async (s, reason) => commit(
+          onSubmit={async (s, reason, force) => commit(
             dlg === 'confirm'
-              ? confirm(insp, s, data.inspectors.items, actor, new Date())
-              : change(insp, s, data.inspectors.items, reason, actor, new Date()),
+              ? confirm(insp, s, data.inspectors.items, actor, new Date(), undefined, force)
+              : change(insp, s, data.inspectors.items, reason, actor, new Date(), force),
             dlg === 'confirm' ? `${insp.id}: 확정했습니다.` : `${insp.id}: 일정을 변경했습니다. 다시 확정해야 합니다.`,
           )}
         />

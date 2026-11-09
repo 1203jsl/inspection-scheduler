@@ -224,6 +224,36 @@ export interface ImportSummary {
   originals: string[];
 }
 
+// ───────── 충돌 조건 ─────────
+
+export interface RuleNum {
+  enabled: boolean;
+  value: number;
+}
+
+export interface Holiday {
+  /** YYYY-MM-DD */
+  date: string;
+  name: string;
+}
+
+export interface ConflictRules {
+  /** 하루 최대 검수 건수 */
+  maxPerDay: RuleNum;
+  /** 검수자 1인당 하루 최대 건수 */
+  maxPerInspector: RuleNum;
+  /** 같은 시간대·같은 장소 중복 금지 (시작 시각 차이가 minutes 분 미만이면 같은 시간대) */
+  sameSlot: { enabled: boolean; minutes: number };
+  /** 하루 최대 검수 수량 합계 */
+  maxQtyPerDay: RuleNum;
+  /** 같은 업체 하루 최대 건수 */
+  maxPerVendor: RuleNum;
+  /** 검수 불가일(휴일) */
+  holidays: { enabled: boolean; dates: Holiday[] };
+  /** 충돌이 있어도 사유를 입력하면 강제 진행 허용 */
+  allowForce: boolean;
+}
+
 export interface Settings extends FileMeta {
   /** Windows 계정 → 표시 이름 */
   userMap: Record<string, string>;
@@ -237,6 +267,7 @@ export interface Settings extends FileMeta {
   excelTemplates: ExcelTemplateDef[];
   /** 빈 양식을 만들 때 쓰는 버전 */
   currentTemplate: string;
+  conflictRules: ConflictRules;
 }
 
 export type DataFiles = {
