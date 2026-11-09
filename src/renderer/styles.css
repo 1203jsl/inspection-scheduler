@@ -1,0 +1,15 @@
+/* 글꼴은 앱에 포함 (회사 PC가 외부 글꼴을 못 받아도 동일하게 보이도록) */
+@import '@fontsource/noto-sans-kr/korean-400.css';
+@import '@fontsource/noto-sans-kr/korean-500.css';
+@import '@fontsource/noto-sans-kr/korean-700.css';
+@import '@fontsource/noto-sans-kr/latin-400.css';
+@import '@fontsource/noto-sans-kr/latin-500.css';
+@import '@fontsource/noto-sans-kr/latin-700.css';
+/* 디자인 기준 (design/ 폴더 그대로) */
+@import '../../design/tokens.css';
+@import '../../design/bundle.css';
+
+/* 실제 창 크기에 맞춤: 디자인의 .app 은 1440×900 시안 기준 */
+html, body, #root { height: 100%; }
+.app { width: 100vw; height: 100vh; }
+.page { overflow: auto; }

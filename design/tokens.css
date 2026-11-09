@@ -1,0 +1,36 @@
+/* tokens.json 값을 CSS 변수로 옮긴 것 (bundle.css가 읽음) */
+:root,[data-theme="light"]{
+--font-sans:"Noto Sans KR","Malgun Gothic","맑은 고딕",system-ui,sans-serif;
+--bg:#f3f5f9;--surface:#ffffff;--surface-alt:#f7f8fc;--sidebar:#16213e;--sidebar-active:#2b3b6b;--on-sidebar:#e4e9f5;--on-sidebar-muted:#a9b6d3;
+--border:#d5dbe7;--border-strong:#8592ab;--ink:#1b2333;--ink-muted:#55607a;--primary:#1f2f63;--primary-hover:#142049;--on-primary:#ffffff;--primary-soft:#e5eaf8;--focus:#2563eb;
+--st-received-bg:#e8ebf1;--st-received-fg:#3a4357;--st-received-dot:#66718b;
+--st-negotiating-bg:#fdf0c4;--st-negotiating-fg:#5c4300;--st-negotiating-dot:#b07d00;
+--st-confirmed-bg:#dbe8fb;--st-confirmed-fg:#0f3f86;--st-confirmed-dot:#2a6fd6;
+--st-changed-bg:#ece3fa;--st-changed-fg:#4b2a8a;--st-changed-dot:#7c4fd0;
+--st-canceled-bg:#fbe6e8;--st-canceled-fg:#8a2a36;--st-canceled-dot:#c0525f;
+--st-pass-bg:#d9f1e1;--st-pass-fg:#0d5a2b;--st-pass-dot:#1e8e4a;
+--st-fail-bg:#c0262d;--st-fail-fg:#ffffff;--st-fail-dot:#c0262d;
+--warn-bg:#fff3cf;--warn-fg:#5c4300;--warn-border:#b07d00;
+--danger-bg:#fde8e8;--danger-fg:#8a1c24;--danger-border:#c0262d;--danger:#c0262d;
+--info-bg:#e3edfb;--info-fg:#0f3f86;--info-border:#2a6fd6;
+--ok-bg:#d9f1e1;--ok-fg:#0d5a2b;--ok-border:#1e8e4a;
+--scrim:#0b102080;
+--radius-sm:4px;--radius-md:6px;--radius-lg:10px;--radius-pill:999px;
+--shadow-card:0 1px 2px #1b233314;--shadow-pop:0 12px 32px #0b102040;
+}
+[data-theme="dark"]{
+--bg:#0f1523;--surface:#171f31;--surface-alt:#1c2538;--sidebar:#0b1020;--sidebar-active:#1c2a52;--on-sidebar:#d3dbee;--on-sidebar-muted:#97a5c6;
+--border:#2c3750;--border-strong:#7a89a8;--ink:#e8ecf5;--ink-muted:#a3aec6;--primary:#9db3f2;--primary-hover:#b9c9f7;--on-primary:#0b1020;--primary-soft:#232f52;--focus:#7aa2ff;
+--st-received-bg:#2a3348;--st-received-fg:#d3d9e6;--st-received-dot:#9aa6c0;
+--st-negotiating-bg:#3b3212;--st-negotiating-fg:#f6dd8b;--st-negotiating-dot:#e0b83a;
+--st-confirmed-bg:#1a2f55;--st-confirmed-fg:#a9c8f7;--st-confirmed-dot:#5b97ee;
+--st-changed-bg:#31224f;--st-changed-fg:#d2bdf6;--st-changed-dot:#a07ff0;
+--st-canceled-bg:#3d2025;--st-canceled-fg:#f2b8bf;--st-canceled-dot:#e07a89;
+--st-pass-bg:#153827;--st-pass-fg:#a6e3bd;--st-pass-dot:#45b873;
+--st-fail-bg:#ef7a80;--st-fail-fg:#2a0508;--st-fail-dot:#ef7a80;
+--warn-bg:#3b3212;--warn-fg:#f6dd8b;--warn-border:#e0b83a;
+--danger-bg:#3d2025;--danger-fg:#f5b5bb;--danger-border:#ef7a80;--danger:#ef7a80;
+--info-bg:#1a2f55;--info-fg:#a9c8f7;--info-border:#5b97ee;
+--ok-bg:#153827;--ok-fg:#a6e3bd;--ok-border:#45b873;
+--scrim:#000000b3;
+}
