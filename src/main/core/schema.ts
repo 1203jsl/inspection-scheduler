@@ -1,5 +1,6 @@
 import type { DataFileKey, DataFiles, ExcelTemplateDef, FileMeta, Settings } from '../../shared/types';
 import { DEFAULT_CONFLICT_RULES } from '../../shared/conflicts';
+import { DEFAULT_MAIL_SETTINGS, DEFAULT_TEMPLATES } from '../../shared/mail';
 import { AppError } from './errors';
 
 /** 이 프로그램이 이해하는 최신 구조 버전 (파일별) */
@@ -7,7 +8,7 @@ export const CURRENT_SCHEMA: Record<DataFileKey, number> = {
   inspections: 2,
   vendors: 1,
   inspectors: 1,
-  settings: 3,
+  settings: 4,
   mail_log: 1,
 };
 
@@ -65,6 +66,13 @@ export const MIGRATIONS: Partial<Record<DataFileKey, Record<number, Migration>>>
     }),
     // v2 → v3: 충돌 조건 추가
     2: (d) => ({ ...d, schemaVersion: 3, conflictRules: d.conflictRules ?? structuredClone(DEFAULT_CONFLICT_RULES) }),
+    // v3 → v4: 메일 템플릿·발송 설정 추가
+    3: (d) => ({
+      ...d,
+      schemaVersion: 4,
+      mailTemplates: { ...structuredClone(DEFAULT_TEMPLATES), ...(d.mailTemplates ?? {}) },
+      mail: d.mail ?? structuredClone(DEFAULT_MAIL_SETTINGS),
+    }),
   },
 };
 
@@ -82,6 +90,8 @@ export function defaultSettings(user: string, name: string, now: string): Settin
     excelTemplates: [TEMPLATE_V1],
     currentTemplate: 'v1',
     conflictRules: structuredClone(DEFAULT_CONFLICT_RULES),
+    mailTemplates: structuredClone(DEFAULT_TEMPLATES),
+    mail: structuredClone(DEFAULT_MAIL_SETTINGS),
   };
 }
 

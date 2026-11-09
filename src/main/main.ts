@@ -1,8 +1,8 @@
-import { app, BrowserWindow, dialog, ipcMain, shell } from 'electron';
+import { app, BrowserWindow, clipboard, dialog, ipcMain, safeStorage, shell } from 'electron';
 import { promises as fs } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import type { CurrentUser, DataFiles, Result, Settings } from '../shared/types';
+import type { CurrentUser, DataFiles, MailDraft, Result, Settings } from '../shared/types';
 import { DataStore } from './core/dataStore';
 import { buildTemplate } from './core/excel/template';
 import { ImportService } from './core/importService';
@@ -10,6 +10,8 @@ import { templateDef } from './core/schema';
 import { AppError, toErrorInfo } from './core/errors';
 import { LockManager } from './core/lock';
 import { readLocalConfig, writeLocalConfig } from './core/localConfig';
+import { MailService } from './core/mailService';
+import { SmtpCredentialStore } from './core/secrets';
 
 // 날짜 입력 칸 등을 한국어 형식으로 (영문 Windows 에서도 동일하게)
 app.commandLine.appendSwitch('lang', 'ko-KR');
@@ -22,6 +24,7 @@ let dataDir: string | null = null;
 let store: DataStore | null = null;
 let lock: LockManager | null = null;
 let importer: ImportService | null = null;
+let mailer: MailService | null = null;
 let lockStaleMinutes = 30;
 let win: BrowserWindow | null = null;
 
@@ -33,6 +36,7 @@ function openStore(dir: string) {
   store = new DataStore(dir, { account, displayName });
   lock = new LockManager(dir, me(), () => lockStaleMinutes);
   importer = new ImportService(store, () => ({ account, displayName }));
+  mailer = new MailService(store, creds(), () => ({ account, displayName }));
 }
 
 function applySettings(s: Settings) {
@@ -149,6 +153,42 @@ handle('import:preview', async (paths: string[]) => need(importer).preview(paths
 handle('import:commit', async (keys: string[]) => need(importer).commit(keys));
 
 /** 데이터 폴더 안의 파일 열기 (원본 엑셀 등) */
+// ───────── 메일 ─────────
+/** 메일 계정·비밀번호: 이 PC의 사용자 AppData 에 safeStorage(Windows DPAPI)로 암호화해 저장 */
+let credStore: SmtpCredentialStore | null = null;
+function creds(): SmtpCredentialStore {
+  credStore ??= new SmtpCredentialStore(app.getPath('userData'), {
+    available: () => safeStorage.isEncryptionAvailable(),
+    encrypt: (t) => safeStorage.encryptString(t),
+    decrypt: (b) => safeStorage.decryptString(b),
+  });
+  return credStore;
+}
+handle('mail:account', async () => creds().info());
+handle('mail:saveAccount', async (o: { account: string; password?: string }) => creds().save(o.account, o.password));
+handle('mail:send', async (d: MailDraft) => need(mailer).send(d));
+handle('mail:recordManual', async (d: MailDraft) => need(mailer).recordManual(d));
+handle('mail:test', async () => need(mailer).test());
+handle('mail:pickAttachments', async () => {
+  const r = await dialog.showOpenDialog(win!, { title: '첨부할 파일 선택', properties: ['openFile', 'multiSelections'] });
+  return r.canceled ? [] : r.filePaths;
+});
+handle('clipboard:write', async (text: string) => {
+  clipboard.writeText(String(text));
+  return true;
+});
+handle('mail:openWebmail', async (url: string) => {
+  let u: URL;
+  try {
+    u = new URL(String(url));
+  } catch {
+    throw new AppError('UNKNOWN', '웹메일 주소가 올바르지 않습니다. 설정 > 메일 발송 설정에서 https:// 로 시작하는 주소를 입력하세요.');
+  }
+  if (u.protocol !== 'https:' && u.protocol !== 'http:') throw new AppError('UNKNOWN', '웹메일 주소는 http:// 또는 https:// 로 시작해야 합니다.');
+  await shell.openExternal(u.toString());
+  return true;
+});
+
 handle('file:open', async (rel: string) => {
   const root = need(dataDir);
   const full = path.resolve(root, rel);

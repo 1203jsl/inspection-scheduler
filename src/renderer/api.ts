@@ -1,5 +1,5 @@
 import type {
-  AppState, BackupEntry, DataFiles, FolderCheck, ImportPreview, ImportSummary, Result,
+  AppState, BackupEntry, DataFiles, FolderCheck, ImportPreview, ImportSummary, MailDraft, MailLogEntry, Result, SmtpAccountInfo,
 } from '../shared/types';
 import type { LockStatus } from '../main/core/lock';
 
@@ -20,6 +20,15 @@ export interface Api {
   importPreview(paths: string[]): Promise<Result<ImportPreview>>;
   importCommit(keys: string[]): Promise<Result<ImportSummary>>;
   openDataFile(rel: string): Promise<Result<boolean>>;
+  mailAccount(): Promise<Result<SmtpAccountInfo>>;
+  /** password: 비우면(undefined) 기존 유지, '' 이면 삭제 */
+  mailSaveAccount(o: { account: string; password?: string }): Promise<Result<SmtpAccountInfo>>;
+  mailSend(d: MailDraft): Promise<Result<MailLogEntry>>;
+  mailRecordManual(d: MailDraft): Promise<Result<MailLogEntry>>;
+  mailTest(): Promise<Result<MailLogEntry>>;
+  mailPickAttachments(): Promise<Result<string[]>>;
+  mailOpenWebmail(url: string): Promise<Result<boolean>>;
+  copyText(text: string): Promise<Result<boolean>>;
   pathForFile(f: File): string;
 }
 

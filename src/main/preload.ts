@@ -20,6 +20,14 @@ const api = {
   importPreview: call('import:preview'),
   importCommit: call('import:commit'),
   openDataFile: call('file:open'),
+  mailAccount: call('mail:account'),
+  mailSaveAccount: call('mail:saveAccount'),
+  mailSend: call('mail:send'),
+  mailRecordManual: call('mail:recordManual'),
+  mailTest: call('mail:test'),
+  mailPickAttachments: call('mail:pickAttachments'),
+  mailOpenWebmail: call('mail:openWebmail'),
+  copyText: call('clipboard:write'),
   /** 끌어다 놓은 파일의 실제 경로 */
   pathForFile: (f: File) => webUtils.getPathForFile(f),
 };

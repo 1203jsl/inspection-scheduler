@@ -1,5 +1,7 @@
-import { useEffect, useState } from 'react';
-import type { AppErrorInfo, BackupEntry, ConflictRules, CurrentUser, DataFiles, RuleNum } from '../shared/types';
+import { useEffect, useRef, useState } from 'react';
+import type { AppErrorInfo, BackupEntry, ConflictRules, CurrentUser, DataFiles, MailKind, MailSettings, MailTemplate, RuleNum, SmtpAccountInfo } from '../shared/types';
+import { MAIL_KIND_LABEL } from '../shared/types';
+import { DEFAULT_MAIL_SETTINGS, DEFAULT_TEMPLATES, PLACEHOLDERS, parseAddresses } from '../shared/mail';
 import { DEFAULT_CONFLICT_RULES } from '../shared/conflicts';
 import { fmtYMD } from '../shared/dates';
 import { api, fmtDateTime, type LockStatus } from './api';
@@ -7,11 +9,13 @@ import { Alert, Dialog, ErrorAlert, Icon } from './components';
 
 /**
  * 설정: 구역 탭 + 화면 맨 아래 [설정 저장] 하나 (디자인 ScreenSettings).
- * 메일 템플릿·메일 발송 설정·알림 탭은 5·7단계에서 추가합니다.
+ * 알림 탭은 7단계에서 추가합니다.
  */
-type Tab = 'conflict' | 'excel' | 'folder' | 'user';
+type Tab = 'conflict' | 'mailTpl' | 'mailSend' | 'excel' | 'folder' | 'user';
 const TABS: { id: Tab; label: string }[] = [
   { id: 'conflict', label: '충돌 조건' },
+  { id: 'mailTpl', label: '메일 템플릿' },
+  { id: 'mailSend', label: '메일 발송 설정' },
   { id: 'excel', label: '엑셀 양식' },
   { id: 'folder', label: '데이터 폴더' },
   { id: 'user', label: '사용자' },
@@ -57,6 +61,18 @@ export function SettingsPage({ data, user, dataDir, onChangeFolder, onSaved, onS
   const [numText, setNumText] = useState<Record<string, string>>(
     Object.fromEntries(NUM_RULES.map((r) => [r.key, String((s.conflictRules ?? DEFAULT_CONFLICT_RULES)[r.key].value)])),
   );
+  const [templates, setTemplates] = useState<Record<MailKind, MailTemplate>>(structuredClone(s.mailTemplates ?? DEFAULT_TEMPLATES));
+  const [tplKind, setTplKind] = useState<MailKind>('registered');
+  const [mail, setMail] = useState<MailSettings>(structuredClone(s.mail ?? DEFAULT_MAIL_SETTINGS));
+  const [portText, setPortText] = useState(String((s.mail ?? DEFAULT_MAIL_SETTINGS).smtp.port));
+  const [acct, setAcct] = useState<SmtpAccountInfo | null>(null);
+  const [acctText, setAcctText] = useState('');
+  const [pw, setPw] = useState('');
+  const [clearPw, setClearPw] = useState(false);
+  const [testing, setTesting] = useState(false);
+  const subjRef = useRef<HTMLInputElement>(null);
+  const bodyRef = useRef<HTMLTextAreaElement>(null);
+  const lastField = useRef<'subject' | 'body'>('body');
   const [hDate, setHDate] = useState('');
   const [hName, setHName] = useState('');
   const [dirty, setDirty] = useState(false);
@@ -68,6 +84,23 @@ export function SettingsPage({ data, user, dataDir, onChangeFolder, onSaved, onS
   useEffect(() => {
     api.listBackups().then((r) => r.ok && setBackups(r.value));
   }, [data]);
+  useEffect(() => {
+    api.mailAccount().then((r) => { if (r.ok) { setAcct(r.value); setAcctText(r.value.account); } });
+  }, []);
+
+  const setTpl = (k: MailKind, t: MailTemplate) => { touch(); setTemplates({ ...templates, [k]: t }); };
+  /** 치환값 칩: 마지막으로 누른 칸(제목/본문)의 커서 위치에 넣음 */
+  const insertPh = (ph: string) => {
+    const el = lastField.current === 'subject' ? subjRef.current : bodyRef.current;
+    const t = templates[tplKind];
+    const key = lastField.current;
+    const cur = t[key];
+    const a = el?.selectionStart ?? cur.length, b = el?.selectionEnd ?? cur.length;
+    setTpl(tplKind, { ...t, [key]: cur.slice(0, a) + ph + cur.slice(b) });
+    requestAnimationFrame(() => { el?.focus(); el?.setSelectionRange(a + ph.length, a + ph.length); });
+  };
+  const setM = (m: Partial<MailSettings>) => { touch(); setMail({ ...mail, ...m }); };
+  const acctChanged = !!acct && (acctText.trim() !== acct.account || pw !== '' || clearPw);
 
   /** 처음 고칠 때 "편집 중" 표시 */
   const touch = () => {
@@ -92,9 +125,16 @@ export function SettingsPage({ data, user, dataDir, onChangeFolder, onSaved, onS
     map: userMap.some(([a, n]) => !a.trim() || !n.trim()) ? '계정과 표시 이름을 모두 입력하세요. 필요 없는 줄은 삭제하세요.' : '',
     items: items.length === 0 ? '검수 품목을 하나 이상 등록하세요. 빈 양식의 드롭다운에 쓰입니다.' : '',
     rules: NUM_RULES.some((r) => numErr(r.key)) ? '충돌 조건의 숫자를 확인하세요.' : '',
+    tpl: (Object.keys(templates) as MailKind[]).filter((k) => !templates[k].subject.trim()).map((k) => MAIL_KIND_LABEL[k]).join(', ')
+      ? `제목이 비어 있는 템플릿이 있습니다: ${(Object.keys(templates) as MailKind[]).filter((k) => !templates[k].subject.trim()).map((k) => MAIL_KIND_LABEL[k]).join(', ')}` : '',
+    port: !(Number.isInteger(Number(portText)) && Number(portText) >= 1 && Number(portText) <= 65535) ? '1~65535 사이의 숫자로 입력하세요. (보통 SSL/TLS=465, STARTTLS=587)' : '',
+    webmail: mail.webmailUrl.trim() && !/^https?:\/\/\S+$/.test(mail.webmailUrl.trim()) ? 'http:// 또는 https:// 로 시작하는 주소로 입력하세요.' : '',
+    cc: parseAddresses(mail.defaultCc).bad.length ? `이메일 형식이 올바르지 않습니다: ${parseAddresses(mail.defaultCc).bad.join(', ')}` : '',
+    acct: acctText.trim() && parseAddresses(acctText).bad.length ? '메일 계정은 이메일 주소로 입력하세요. 예: hong@company.co.kr' : '',
   };
   const tabHasError: Record<Tab, boolean> = {
-    conflict: !!invalid.rules, excel: !!invalid.items, folder: !!(invalid.lock || invalid.keep), user: !!invalid.map,
+    conflict: !!invalid.rules, mailTpl: !!invalid.tpl, mailSend: !!(invalid.port || invalid.webmail || invalid.cc || invalid.acct),
+    excel: !!invalid.items, folder: !!(invalid.lock || invalid.keep), user: !!invalid.map,
   };
   const hasInvalid = Object.values(invalid).some(Boolean);
 
@@ -124,13 +164,31 @@ export function SettingsPage({ data, user, dataDir, onChangeFolder, onSaved, onS
       const n = Number(numText[r.key]);
       nextRules[r.key] = { ...rules[r.key], value: Number.isInteger(n) && n >= 1 ? n : rules[r.key].value };
     }
+    const nextMail: MailSettings = {
+      ...mail, webmailUrl: mail.webmailUrl.trim(), defaultCc: mail.defaultCc.trim(),
+      smtp: { ...mail.smtp, host: mail.smtp.host.trim(), port: Number(portText) },
+    };
     const r = await api.save({
-      settings: { ...s, userMap: map, lockStaleMinutes: lockN, backupKeep: keepN, inspectionItems: items, conflictRules: nextRules },
+      settings: {
+        ...s, userMap: map, lockStaleMinutes: lockN, backupKeep: keepN, inspectionItems: items, conflictRules: nextRules,
+        mailTemplates: templates, mail: nextMail,
+      },
     });
     if (r.ok) {
+      // 메일 계정·비밀번호는 이 PC에만 (공유 설정 파일에는 넣지 않음)
+      let acctMsg = '';
+      if (acctChanged) {
+        const a = await api.mailSaveAccount({ account: acctText.trim(), password: clearPw ? '' : pw || undefined });
+        if (a.ok) { setAcct(a.value); setPw(''); setClearPw(false); }
+        else {
+          acctMsg = ` 단, ${a.error.message}`;
+          const info = await api.mailAccount();
+          if (info.ok) setAcct(info.value);
+        }
+      }
       await api.lockRelease();
       setDirty(false);
-      onSaved('설정을 저장했습니다.');
+      onSaved('설정을 저장했습니다.' + acctMsg);
     } else {
       setError(onSaveError(r.error));
     }
@@ -203,6 +261,119 @@ export function SettingsPage({ data, user, dataDir, onChangeFolder, onSaved, onS
           <div className="rule">
             <Switch label="충돌이 있어도 사유를 입력하면 강제 진행 허용" checked={rules.allowForce} onChange={(v) => setRule('allowForce', v)} />
             <span className="help" style={{ width: 260 }}>{rules.allowForce ? '사유는 변경 이력에 남습니다' : '충돌이 있으면 확정·변경할 수 없습니다'}</span>
+          </div>
+        </div>
+      )}
+
+      {tab === 'mailTpl' && (
+        <div className="card" role="tabpanel" style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+          <div className="card-h" style={{ margin: 0 }}>메일 템플릿 <span className="help" style={{ fontWeight: 400 }}>업체 담당자에게 가는 메일. 보내기 전 미리보기에서 다시 고칠 수 있습니다.</span></div>
+          <div className="tabs" role="tablist" aria-label="메일 종류">
+            {(Object.keys(MAIL_KIND_LABEL) as MailKind[]).map((k) => (
+              <button key={k} className="tab" role="tab" type="button" aria-selected={tplKind === k} onClick={() => setTplKind(k)}>
+                {MAIL_KIND_LABEL[k]}{!templates[k].subject.trim() && <Icon name="error" style={{ marginLeft: 4, color: 'var(--danger-fg)' }} />}
+              </button>
+            ))}
+          </div>
+          <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) 280px', gap: 16 }}>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+              <div className="field">
+                <label htmlFor="ts">제목</label>
+                <input id="ts" ref={subjRef} spellCheck={false} className={`input${!templates[tplKind].subject.trim() ? ' invalid' : ''}`} value={templates[tplKind].subject}
+                  onFocus={() => (lastField.current = 'subject')} onChange={(e) => setTpl(tplKind, { ...templates[tplKind], subject: e.target.value })} />
+              </div>
+              <div className="field">
+                <label htmlFor="tb">본문</label>
+                <textarea id="tb" ref={bodyRef} spellCheck={false} className="input" style={{ height: 260, lineHeight: '22px' }} value={templates[tplKind].body}
+                  onFocus={() => (lastField.current = 'body')} onChange={(e) => setTpl(tplKind, { ...templates[tplKind], body: e.target.value })} />
+              </div>
+              <div className="btn-row">
+                <button className="btn btn-sm" type="button" onClick={() => setTpl(tplKind, { ...DEFAULT_TEMPLATES[tplKind] })}>기본 문구로 되돌리기</button>
+              </div>
+            </div>
+            <div className="field">
+              <span className="lbl">사용 가능한 치환값</span>
+              <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                {PLACEHOLDERS.map((ph) => (
+                  <button key={ph} type="button" className="tag" style={{ cursor: 'pointer', background: 'var(--surface)' }} onClick={() => insertPh(ph)}>{ph}</button>
+                ))}
+              </div>
+              <span className="help">누르면 마지막으로 누른 칸(제목/본문)의 커서 위치에 들어갑니다. {'{결과}·{불합격사유}'}는 합격/불합격 메일에 씁니다.</span>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {tab === 'mailSend' && (
+        <div className="card" role="tabpanel" style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+          <div className="card-h" style={{ margin: 0 }}>메일 발송 설정</div>
+          <fieldset className="field" style={{ border: 0, margin: 0, padding: 0 }}>
+            <legend className="lbl" style={{ padding: '0 0 6px' }}>발송 방식</legend>
+            <label className="radio"><input type="radio" name="mm" checked={mail.method === 'smtp'} onChange={() => setM({ method: 'smtp' })} />자동 SMTP (미리보기 후 [발송])</label>
+            <label className="radio"><input type="radio" name="mm" checked={mail.method === 'manual'} onChange={() => setM({ method: 'manual' })} />수동 복사 (웹메일에 붙여넣기)</label>
+            <span className="help">어느 방식이든 업체 메일은 미리보기를 거쳐야 보냅니다. 모든 PC에 같이 적용됩니다.</span>
+          </fieldset>
+          <div className="form-row" style={{ maxWidth: 760 }}>
+            <div className="field">
+              <label htmlFor="sh">SMTP 서버</label>
+              <input id="sh" className="input" disabled={mail.method !== 'smtp'} placeholder="사내 IT에 확인 (예: smtp.회사도메인)" value={mail.smtp.host}
+                onChange={(e) => setM({ smtp: { ...mail.smtp, host: e.target.value } })} />
+            </div>
+            <div className="field">
+              <label htmlFor="sp">포트 · 보안 방식</label>
+              <div style={{ display: 'flex', gap: 8 }}>
+                <input id="sp" className={`input${invalid.port ? ' invalid' : ''}`} style={{ width: 96 }} inputMode="numeric" disabled={mail.method !== 'smtp'} value={portText}
+                  onChange={(e) => { touch(); setPortText(e.target.value); }} />
+                <select className="sel" aria-label="보안 방식" disabled={mail.method !== 'smtp'} value={mail.smtp.security}
+                  onChange={(e) => setM({ smtp: { ...mail.smtp, security: e.target.value as MailSettings['smtp']['security'] } })}>
+                  <option value="starttls">STARTTLS (보통 587)</option>
+                  <option value="ssl">SSL/TLS (보통 465)</option>
+                  <option value="none">암호화 없음 (사내 전용 서버만)</option>
+                </select>
+              </div>
+              {invalid.port && <span className="help help-err"><Icon name="error" />{invalid.port}</span>}
+            </div>
+            <div className="field">
+              <label htmlFor="sa">메일 계정 (이 PC)</label>
+              <input id="sa" className={`input${invalid.acct ? ' invalid' : ''}`} disabled={mail.method !== 'smtp'} placeholder="예: hong@company.co.kr" value={acctText}
+                onChange={(e) => { touch(); setAcctText(e.target.value); }} />
+              {invalid.acct ? <span className="help help-err"><Icon name="error" />{invalid.acct}</span> : <span className="help">보내는 사람 주소로도 쓰입니다. PC마다 따로 저장합니다.</span>}
+            </div>
+            <div className="field">
+              <label htmlFor="sw">비밀번호 (이 PC)</label>
+              <input id="sw" className="input" type="password" autoComplete="off" disabled={mail.method !== 'smtp' || clearPw}
+                placeholder={acct?.hasPassword ? '저장됨 · 바꿀 때만 입력' : '입력하세요'} value={pw}
+                onChange={(e) => { touch(); setPw(e.target.value); }} />
+              <span className="help">
+                Windows 계정으로 암호화해 이 PC에만 저장하고, 공유 폴더·기록에는 남기지 않습니다.
+                {acct && !acct.encryptionAvailable && ' 이 PC에서는 암호화를 쓸 수 없어 저장할 수 없습니다.'}
+              </span>
+              {acct?.hasPassword && (
+                <label className="switch-row"><input type="checkbox" className="chk" checked={clearPw} onChange={(e) => { touch(); setClearPw(e.target.checked); setPw(''); }} />저장된 비밀번호 지우기</label>
+              )}
+            </div>
+          </div>
+          <div className="btn-row">
+            <button className="btn" type="button" disabled={mail.method !== 'smtp' || dirty || testing} onClick={async () => {
+              setTesting(true); setError(null); setNotice('');
+              const r = await api.mailTest();
+              setTesting(false);
+              if (r.ok) setNotice(`테스트 메일을 ${r.value.to}(으)로 보냈습니다. 받은편지함을 확인하세요.`);
+              else setError(r.error);
+            }}>{testing ? '보내는 중…' : '테스트 메일 보내기'}</button>
+            <span className="help">{dirty ? '바꾼 설정을 먼저 저장한 뒤 시험하세요.' : '설정한 계정으로 본인에게 시험 메일을 보냅니다.'}</span>
+          </div>
+          <div className="form-row" style={{ maxWidth: 760 }}>
+            <div className="field">
+              <label htmlFor="wu">웹메일 주소 (수동 발송용)</label>
+              <input id="wu" className={`input${invalid.webmail ? ' invalid' : ''}`} placeholder="https://" value={mail.webmailUrl} onChange={(e) => setM({ webmailUrl: e.target.value })} />
+              {invalid.webmail && <span className="help help-err"><Icon name="error" />{invalid.webmail}</span>}
+            </div>
+            <div className="field">
+              <label htmlFor="dc">업체 메일 기본 참조</label>
+              <input id="dc" className={`input${invalid.cc ? ' invalid' : ''}`} placeholder="예: quality@company.co.kr (여러 명은 쉼표)" value={mail.defaultCc} onChange={(e) => setM({ defaultCc: e.target.value })} />
+              {invalid.cc && <span className="help help-err"><Icon name="error" />{invalid.cc}</span>}
+            </div>
           </div>
         </div>
       )}

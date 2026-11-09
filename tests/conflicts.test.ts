@@ -143,7 +143,7 @@ describe('설정 구조 변환', () => {
   it('settings v2 → v3: 충돌 조건 기본값 추가', () => {
     const v2 = { schemaVersion: 2, revision: 5, userMap: {}, lockStaleMinutes: 30, backupKeep: 50, inspectionItems: [], excelTemplates: [], currentTemplate: 'v1' };
     const v3 = migrate('settings', v2);
-    expect(v3.schemaVersion).toBe(3);
+    expect(v3.schemaVersion).toBeGreaterThanOrEqual(3); // 이후 구조까지 이어서 바뀜
     expect(v3.conflictRules).toEqual(DEFAULT_CONFLICT_RULES);
     expect(v3.conflictRules).not.toBe(DEFAULT_CONFLICT_RULES); // 복사본
   });

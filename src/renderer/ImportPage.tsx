@@ -2,6 +2,7 @@ import { useMemo, useState, type DragEvent } from 'react';
 import type { AppErrorInfo, CellIssue, FieldKey, ImportPreview, ImportSummary, PreviewRow } from '../shared/types';
 import { api, type LockStatus } from './api';
 import { Alert, Dialog, ErrorAlert, Icon } from './components';
+import { useApp } from './ctx';
 
 const COLS: { key: FieldKey; label: string; num?: boolean }[] = [
   { key: 'id', label: '신청번호' },
@@ -42,18 +43,25 @@ function Flagged({ issues, children, tipUp }: { issues: CellIssue[]; children: R
   );
 }
 
+/** 마지막 가져오기 결과 (화면을 옮겨도 유지) */
+let lastSummary: ImportSummary | null = null;
+
 export function ImportPage({ onImported, onSaveError, onLockChange }: {
   onImported: () => void;
   onSaveError: (e: AppErrorInfo) => AppErrorInfo | null;
   onLockChange: (l: LockStatus) => void;
 }) {
+  const { go, data } = useApp();
   const [preview, setPreview] = useState<ImportPreview | null>(null);
   const [include, setInclude] = useState<Set<string>>(new Set());
   const [busy, setBusy] = useState(false);
   const [drag, setDrag] = useState(false);
   const [error, setError] = useState<AppErrorInfo | null>(null);
   const [notice, setNotice] = useState('');
-  const [summary, setSummary] = useState<ImportSummary | null>(null);
+  // 메일 화면에 다녀와도 결과 요약을 유지 (새 파일을 넣으면 지움)
+  const [summary, setSummaryState] = useState<ImportSummary | null>(lastSummary);
+  const setSummary = (v: ImportSummary | null) => { lastSummary = v; setSummaryState(v); };
+  const replied = (id: string) => data.mail_log.items.some((m) => m.inspectionId === id && m.kind === 'registered' && m.result !== 'failed');
   const [confirmErrors, setConfirmErrors] = useState(false);
 
   const load = async (paths: string[]) => {
@@ -181,13 +189,24 @@ export function ImportPage({ onImported, onSaveError, onLockChange }: {
           </Alert>
           {summary.created.length > 0 && (
             <div className="card" style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-              <div className="card-h" style={{ margin: 0 }}>새로 부여한 신청번호 <span className="help" style={{ fontWeight: 400 }}>업체에 회신할 번호입니다 (메일 발송은 5단계)</span></div>
+              <div className="card-h" style={{ margin: 0 }}>새로 부여한 신청번호 <span className="help" style={{ fontWeight: 400 }}>[메일 보내기]로 업체에 신청번호를 회신하세요</span></div>
               <div className="tbl-wrap">
                 <table className="tbl">
-                  <thead><tr><th>신청번호</th><th>업체명</th><th>품명</th><th>받는 사람</th></tr></thead>
+                  <thead><tr><th>신청번호</th><th>업체명</th><th>품명</th><th>받는 사람</th><th /></tr></thead>
                   <tbody>
                     {summary.created.map((c) => (
-                      <tr key={c.id}><td><b>{c.id}</b></td><td>{c.vendorName}</td><td>{c.itemName}</td><td>{c.contactEmail}</td></tr>
+                      <tr key={c.id}>
+                        <td><b>{c.id}</b></td><td>{c.vendorName}</td><td>{c.itemName}</td><td>{c.contactEmail || <span className="muted">(없음)</span>}</td>
+                        <td>
+                          {replied(c.id)
+                            ? <span className="cell-flag" style={{ color: 'var(--ok-fg)', fontWeight: 700 }}><Icon name="ok" />회신함</span>
+                            : (
+                              <button className="btn btn-sm" type="button" onClick={() => go({ page: 'mail', id: c.id, kind: 'registered', from: { page: 'import' } })}>
+                                <Icon name="mail" />메일 보내기
+                              </button>
+                            )}
+                        </td>
+                      </tr>
                     ))}
                   </tbody>
                 </table>

@@ -1,5 +1,5 @@
 import { createContext, useContext, useEffect } from 'react';
-import type { AppErrorInfo, CurrentUser, DataFiles, Inspection, InspectionStatus } from '../shared/types';
+import type { AppErrorInfo, CurrentUser, DataFiles, Inspection, InspectionStatus, MailKind } from '../shared/types';
 import { api, type LockStatus } from './api';
 
 export type Route =
@@ -7,6 +7,7 @@ export type Route =
   | { page: 'list'; preset?: ListPreset }
   | { page: 'calendar'; date?: string }
   | { page: 'detail'; id: string; from?: Route }
+  | { page: 'mail'; id: string; kind?: MailKind; from?: Route }
   | { page: 'vendors'; vendor?: string }
   | { page: 'inspectors' };
 
@@ -33,6 +34,8 @@ export interface AppCtx {
   saveInspections: (items: Inspection[], okMessage?: string) => Promise<AppErrorInfo | 'handled' | null>;
   inspectorName: (id: string | null | undefined) => string;
   setLock: (l: LockStatus) => void;
+  /** 데이터 다시 읽기 */
+  reload: () => Promise<void>;
 }
 
 export const Ctx = createContext<AppCtx | null>(null);

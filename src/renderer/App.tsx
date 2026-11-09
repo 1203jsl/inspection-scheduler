@@ -9,6 +9,7 @@ import { DetailPage } from './DetailPage';
 import { FirstRun } from './FirstRun';
 import { ImportPage } from './ImportPage';
 import { ListPage } from './ListPage';
+import { MailPage } from './MailPage';
 import { InspectorsPage, VendorsPage } from './PeoplePages';
 import { SettingsPage } from './SettingsPage';
 import { StatusPage } from './StatusPage';
@@ -106,6 +107,7 @@ export function App() {
       saveInspections: (items: Inspection[], msg?: string) => save({ inspections: { ...data.inspections, items } }, msg),
       inspectorName: (id) => (id ? names.get(id) ?? '(삭제된 검수자)' : ''),
       setLock,
+      reload,
     };
   }, [data, state, today, go, reload]);
 
@@ -126,8 +128,14 @@ export function App() {
     );
   }
 
-  const navId: NavId = route.page === 'detail' ? (route.from?.page === 'calendar' ? 'calendar' : route.from?.page === 'vendors' ? 'vendors' : 'list') : route.page;
-  const title = route.page === 'detail' ? `${route.id} · 검수 건 상세` : NAV.find((n) => n.id === route.page)!.label;
+  const origin = (r: Route): NavId => {
+    if (r.page === 'detail' || r.page === 'mail') return r.from ? origin(r.from) : 'list';
+    return r.page;
+  };
+  const navId: NavId = origin(route);
+  const title = route.page === 'detail' ? `${route.id} · 검수 건 상세`
+    : route.page === 'mail' ? `${route.id} · 메일 미리보기`
+    : NAV.find((n) => n.id === route.page)!.label;
   const otherEditing = !loadError && lock?.holder && !lock.mine ? lock.holder : null;
 
   return (
@@ -188,6 +196,7 @@ export function App() {
               {route.page === 'list' && <ListPage key={JSON.stringify(route.preset ?? {})} preset={route.preset} />}
               {route.page === 'calendar' && <CalendarPage initialDate={route.date} />}
               {route.page === 'detail' && <DetailPage key={route.id} id={route.id} from={route.from} />}
+              {route.page === 'mail' && <MailPage key={`${route.id}:${route.kind ?? ''}`} id={route.id} kind={route.kind} from={route.from} />}
               {route.page === 'vendors' && <VendorsPage initial={route.vendor} />}
               {route.page === 'inspectors' && <InspectorsPage />}
               {route.page === 'dashboard' && <StatusPage data={ctx.data} step="7단계" label="대시보드" />}

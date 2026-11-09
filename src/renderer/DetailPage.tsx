@@ -1,6 +1,7 @@
 import { useState } from 'react';
-import type { AppErrorInfo, HistoryEntry, Inspection, InspectionStatus } from '../shared/types';
-import { STATUS_LABEL } from '../shared/types';
+import type { AppErrorInfo, HistoryEntry, Inspection, InspectionStatus, MailLogEntry } from '../shared/types';
+import { MAIL_KIND_LABEL, STATUS_LABEL } from '../shared/types';
+import { kindForStatus, pendingMail } from '../shared/mail';
 import { fmtStamp, fmtYMD } from '../shared/dates';
 import {
   addNote, can, cancel, change, confirm, editRequest, FIELD_LABEL, nextAction, resultMissing, startNegotiation, WorkflowError,
@@ -48,7 +49,11 @@ export function DetailPage({ id, from }: { id: string; from?: Route }) {
     }
   };
 
-  const primary = nextAction(insp);
+  const mails = data.mail_log.items.filter((m) => m.inspectionId === insp.id);
+  const pending = pendingMail(insp, data.mail_log.items);
+  // 보낼 안내 메일이 남아 있으면 [메일 보내기]가 다음 할 일
+  const primary = pending ? null : nextAction(insp);
+  const here: Route = { page: 'detail', id: insp.id, from };
   const btn = (key: 'negotiate' | 'confirm' | 'change', label: string, onClick: () => void) =>
     can(insp, key) && (
       <button key={key} className={`btn${primary === key ? ' btn-primary' : ''}`} type="button" onClick={onClick}>{label}</button>
@@ -59,7 +64,7 @@ export function DetailPage({ id, from }: { id: string; from?: Route }) {
     { id: 'nego', label: `일정 협의${insp.negotiations.length ? ` (${insp.negotiations.length})` : ''}` },
     { id: 'result', label: '검수 결과' },
     { id: 'files', label: `첨부파일${insp.sources.length ? ` (${insp.sources.length})` : ''}` },
-    { id: 'mail', label: '메일 이력' },
+    { id: 'mail', label: `메일 이력${mails.length ? ` (${mails.length})` : ''}` },
     { id: 'history', label: `변경 이력 (${insp.history.length})` },
   ];
 
@@ -82,8 +87,14 @@ export function DetailPage({ id, from }: { id: string; from?: Route }) {
             {btn('confirm', insp.status === 'changed' ? '재확정' : '확정', () => setDlg('confirm'))}
             {btn('change', '변경', () => setDlg('change'))}
             {can(insp, 'cancel') && <button className="btn btn-danger" type="button" onClick={() => setDlg('cancel')}>취소</button>}
+            {kindForStatus(insp) && (
+              <button className={`btn${pending ? ' btn-primary' : ''}`} type="button" onClick={() => go({ page: 'mail', id: insp.id, from: here })}>
+                <Icon name="mail" />메일 보내기
+              </button>
+            )}
           </div>
         </div>
+        {pending && <Alert kind="info"><b>안내</b> · {MAIL_KIND_LABEL[pending]} 안내 메일이 아직 발송되지 않았습니다.</Alert>}
         {insp.status === 'changed' && <Alert kind="info">일정이 변경되었습니다. 업체와 다시 맞춘 뒤 [재확정]하세요.</Alert>}
         {resultMissing(insp, today) && <Alert kind="danger">검수일({fmtYMD(insp.schedule.date)})이 지났는데 결과가 없습니다. 결과 입력은 6단계에서 만듭니다.</Alert>}
         {error && <ErrorAlert error={error} />}
@@ -149,7 +160,7 @@ export function DetailPage({ id, from }: { id: string; from?: Route }) {
           </div>
         )}
 
-        {tab === 'mail' && <Alert kind="info">메일 발송과 메일 이력은 5단계에서 만듭니다.</Alert>}
+        {tab === 'mail' && <MailHistory mails={mails} />}
 
         {tab === 'history' && <HistoryTable insp={insp} inspectorName={inspectorName} />}
       </div>
@@ -247,6 +258,52 @@ function HistoryTable({ insp, inspectorName }: { insp: Inspection; inspectorName
               <td className="diff" title={h.reason}>{h.reason ?? ''}</td>
             </tr>
           ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+const RESULT: Record<MailLogEntry['result'], { icon: 'ok' | 'error'; label: string; color: string }> = {
+  sent: { icon: 'ok', label: '발송 성공', color: 'var(--ok-fg)' },
+  manual: { icon: 'ok', label: '수동 발송 기록', color: 'var(--ok-fg)' },
+  failed: { icon: 'error', label: '발송 실패', color: 'var(--danger-fg)' },
+};
+
+function MailHistory({ mails }: { mails: MailLogEntry[] }) {
+  const [open, setOpen] = useState<string | null>(null);
+  if (mails.length === 0) return <Alert kind="info">아직 보낸 메일이 없습니다. [메일 보내기]로 미리보기를 연 뒤 보내세요.</Alert>;
+  const list = [...mails].reverse();
+  return (
+    <div className="tbl-wrap" style={{ overflow: 'auto' }}>
+      <table className="tbl">
+        <thead><tr><th>발송 일시</th><th>종류</th><th>받는 사람</th><th>제목</th><th>방식</th><th>결과</th><th>보낸 사람</th><th /></tr></thead>
+        <tbody>
+          {list.map((m) => {
+            const r = RESULT[m.result];
+            return [
+              <tr key={m.id}>
+                <td>{fmtStamp(m.at)}</td>
+                <td>{m.kind === 'test' ? '테스트' : MAIL_KIND_LABEL[m.kind]}</td>
+                <td title={m.to}>{m.to}</td>
+                <td title={m.subject}>{m.subject}</td>
+                <td>{m.method === 'smtp' ? '자동' : '수동'}</td>
+                <td><span className="cell-flag" style={{ color: r.color, fontWeight: 700 }}><Icon name={r.icon} />{r.label}</span></td>
+                <td>{m.byName}</td>
+                <td><button className="btn btn-sm btn-ghost" type="button" aria-expanded={open === m.id} onClick={() => setOpen(open === m.id ? null : m.id)}>{open === m.id ? '닫기' : '내용 보기'}</button></td>
+              </tr>,
+              open === m.id && (
+                <tr key={m.id + ':b'}>
+                  <td colSpan={8} className="diff" style={{ background: 'var(--surface-alt)' }}>
+                    {m.error && <div style={{ color: 'var(--danger-fg)', marginBottom: 8 }}><Icon name="error" /> {m.error}</div>}
+                    {m.cc && <div className="help">참조: {m.cc}</div>}
+                    {m.attachments.length > 0 && <div className="help">첨부: {m.attachments.join(', ')}</div>}
+                    <div style={{ whiteSpace: 'pre-wrap', marginTop: 8 }}>{m.body}</div>
+                  </td>
+                </tr>
+              ),
+            ];
+          })}
         </tbody>
       </table>
     </div>

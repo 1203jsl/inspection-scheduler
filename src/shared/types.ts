@@ -254,6 +254,75 @@ export interface ConflictRules {
   allowForce: boolean;
 }
 
+// ───────── 메일 ─────────
+
+/** 발송 이벤트 (업체 담당자에게) */
+export type MailKind = 'registered' | 'confirmed' | 'changed' | 'canceled' | 'pass' | 'fail';
+
+export const MAIL_KIND_LABEL: Record<MailKind, string> = {
+  registered: '등록(신청번호 회신)',
+  confirmed: '확정',
+  changed: '변경',
+  canceled: '취소',
+  pass: '합격',
+  fail: '불합격',
+};
+
+export interface MailTemplate {
+  subject: string;
+  body: string;
+}
+
+export type SmtpSecurity = 'ssl' | 'starttls' | 'none';
+
+/** 모든 PC 공통 메일 설정 (계정·비밀번호는 PC별로 따로 저장) */
+export interface MailSettings {
+  method: 'smtp' | 'manual';
+  smtp: { host: string; port: number; security: SmtpSecurity };
+  /** 수동 발송 때 [웹메일 열기]로 여는 주소 */
+  webmailUrl: string;
+  /** 업체 메일에 늘 넣을 참조 (예: 팀 공용 주소) */
+  defaultCc: string;
+}
+
+export interface MailLogEntry {
+  id: string;
+  at: string;
+  by: string;
+  byName: string;
+  /** 검수 건과 관계없는 시험 메일은 null */
+  inspectionId: string | null;
+  kind: MailKind | 'test';
+  to: string;
+  cc: string;
+  subject: string;
+  body: string;
+  attachments: string[];
+  method: 'smtp' | 'manual';
+  /** sent: 자동 발송 성공 / failed: 실패 / manual: 수동 발송 완료로 기록 */
+  result: 'sent' | 'failed' | 'manual';
+  error?: string;
+}
+
+/** 이 PC에 저장된 SMTP 계정 (비밀번호는 화면에 돌려주지 않음) */
+export interface SmtpAccountInfo {
+  account: string;
+  hasPassword: boolean;
+  /** 이 PC에서 비밀번호 암호화를 쓸 수 있는지 */
+  encryptionAvailable: boolean;
+}
+
+export interface MailDraft {
+  inspectionId: string | null;
+  kind: MailKind | 'test';
+  to: string;
+  cc: string;
+  subject: string;
+  body: string;
+  /** 첨부 파일: 데이터 폴더 기준 상대 경로 또는 PC의 절대 경로 */
+  attachments: string[];
+}
+
 export interface Settings extends FileMeta {
   /** Windows 계정 → 표시 이름 */
   userMap: Record<string, string>;
@@ -268,6 +337,8 @@ export interface Settings extends FileMeta {
   /** 빈 양식을 만들 때 쓰는 버전 */
   currentTemplate: string;
   conflictRules: ConflictRules;
+  mailTemplates: Record<MailKind, MailTemplate>;
+  mail: MailSettings;
 }
 
 export type DataFiles = {
@@ -275,7 +346,7 @@ export type DataFiles = {
   vendors: ListFile<Vendor>;
   inspectors: ListFile<Inspector>;
   settings: Settings;
-  mail_log: ListFile<unknown>;
+  mail_log: ListFile<MailLogEntry>;
 };
 
 export interface LockInfo {
