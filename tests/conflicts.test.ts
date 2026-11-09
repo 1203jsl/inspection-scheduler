@@ -68,6 +68,20 @@ describe('충돌 규칙별 검사', () => {
     expect(conflictsFor(slot({ vendorName: '대양산업', time: '15:00' }), day, r, nameOf)).toEqual([]);
   });
 
+  it('기본 기준은 30분: 30분 안쪽이면 같은 시간대, 30분 차이부터는 허용', () => {
+    expect(DEFAULT_CONFLICT_RULES.sameSlot.minutes).toBe(30);
+    const a = slot({ id: 'IN-A', time: '10:00' });
+    expect(conflictsFor(slot({ time: '10:29' }), [a], rules(), nameOf).map((c) => c.rule)).toContain('sameSlot');
+    expect(conflictsFor(slot({ time: '10:30' }), [a], rules(), nameOf).map((c) => c.rule)).not.toContain('sameSlot');
+  });
+
+  it('미확정 건(신청접수·등록·일정협의중·변경됨)도 충돌 검사에 포함, 취소만 빠짐', () => {
+    const r = only('maxPerDay', { enabled: true, value: 3 });
+    const day = (['received', 'registered', 'negotiating'] as const).map((st, k) => slot({ status: st, time: `${9 + k}:00`.padStart(5, '0') }));
+    expect(msgs(conflictsFor(slot({ status: 'changed', time: '15:00' }), day, r, nameOf))).toEqual(['하루 최대 검수 건수(3건) 초과 — 11-10(화) 4건']);
+    expect(conflictsFor(slot({ time: '15:00' }), [...day.slice(0, 2), { ...day[2], status: 'canceled' }], r, nameOf)).toEqual([]);
+  });
+
   it('검수 불가일', () => {
     const r = only('holidays', { enabled: true, dates: [{ date: '2026-12-25', name: '성탄절' }] });
     expect(msgs(conflictsFor(slot({ date: '2026-12-25' }), [], r, nameOf))).toEqual(['검수 불가일입니다 — 12-25(금) 성탄절']);
@@ -82,7 +96,7 @@ describe('충돌 규칙별 검사', () => {
 
   it('여러 규칙이 함께 걸리면 모두 알려준다', () => {
     const day = [slot({ inspectorId: 'p1', time: '09:00' }), slot({ inspectorId: 'p1', time: '13:00' }), slot({ time: '15:00' })];
-    const cs = conflictsFor(slot({ inspectorId: 'p1', time: '13:30' }), day, rules(), nameOf);
+    const cs = conflictsFor(slot({ inspectorId: 'p1', time: '13:20' }), day, rules(), nameOf);
     expect(cs.map((c) => c.rule).sort()).toEqual(['maxPerDay', 'maxPerInspector', 'maxPerVendor', 'sameSlot']);
   });
 });
@@ -132,10 +146,20 @@ describe('가져오기 충돌 경고', () => {
   });
 
   it('가져오는 행끼리도 검사하고, 오류 행은 셈에서 뺀다', () => {
-    const m = importConflicts([row(3, { requestedDate: '2026-12-05', time: undefined } as any), row(4, { requestedDate: '2026-12-05', location: 'B', requestedTime: '17:30' }), row(5, { requestedDate: '2026-12-05' }, 'error')], [], settings, []);
+    const m = importConflicts([row(3, { requestedDate: '2026-12-05', time: undefined } as any), row(4, { requestedDate: '2026-12-05', location: 'B', requestedTime: '17:20' }), row(5, { requestedDate: '2026-12-05' }, 'error')], [], settings, []);
     expect(m.get('0:4')?.requestedDate?.map((i) => i.message)).toEqual([
-      '충돌: 같은 시간대·같은 장소 중복 — 12-05(토) B 17:00(a.xlsx 3행) / 17:30(a.xlsx 4행) — 가져온 뒤 일정 조정 필요',
+      '충돌: 같은 시간대·같은 장소 중복 — 12-05(토) B 17:00(a.xlsx 3행) / 17:20(a.xlsx 4행) — 가져온 뒤 일정 조정 필요',
     ]);
+  });
+});
+
+describe('설정 구조 변환 v5', () => {
+  it('저장돼 있던 옛 기본값 60분은 30분으로, 다른 값은 그대로', () => {
+    const base = { schemaVersion: 4, revision: 1, mailTemplates: {}, mail: {} };
+    const a = migrate('settings', { ...base, conflictRules: { ...DEFAULT_CONFLICT_RULES, sameSlot: { enabled: false, minutes: 60 } } } as any);
+    expect(a.conflictRules.sameSlot).toEqual({ enabled: false, minutes: 30 }); // 켜고 끈 상태는 유지
+    const b = migrate('settings', { ...base, conflictRules: { ...DEFAULT_CONFLICT_RULES, sameSlot: { enabled: true, minutes: 45 } } } as any);
+    expect(b.conflictRules.sameSlot.minutes).toBe(45);
   });
 });
 

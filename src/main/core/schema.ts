@@ -8,7 +8,7 @@ export const CURRENT_SCHEMA: Record<DataFileKey, number> = {
   inspections: 2,
   vendors: 1,
   inspectors: 1,
-  settings: 4,
+  settings: 5,
   mail_log: 1,
 };
 
@@ -72,6 +72,14 @@ export const MIGRATIONS: Partial<Record<DataFileKey, Record<number, Migration>>>
       schemaVersion: 4,
       mailTemplates: { ...structuredClone(DEFAULT_TEMPLATES), ...(d.mailTemplates ?? {}) },
       mail: d.mail ?? structuredClone(DEFAULT_MAIL_SETTINGS),
+    }),
+    // v4 → v5: '같은 시간대' 기준 60분 → 30분 (화면에서 바꿀 수 없던 값이라 60이면 옛 기본값)
+    4: (d) => ({
+      ...d,
+      schemaVersion: 5,
+      conflictRules: d.conflictRules?.sameSlot?.minutes === 60
+        ? { ...d.conflictRules, sameSlot: { ...d.conflictRules.sameSlot, minutes: 30 } }
+        : d.conflictRules,
     }),
   },
 };

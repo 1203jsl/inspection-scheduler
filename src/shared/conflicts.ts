@@ -9,7 +9,7 @@ import { fmtMD } from './dates';
 export const DEFAULT_CONFLICT_RULES: ConflictRules = {
   maxPerDay: { enabled: true, value: 3 },
   maxPerInspector: { enabled: true, value: 2 },
-  sameSlot: { enabled: true, minutes: 60 },
+  sameSlot: { enabled: true, minutes: 30 },
   maxQtyPerDay: { enabled: false, value: 1000 },
   maxPerVendor: { enabled: true, value: 2 },
   holidays: { enabled: true, dates: [] },

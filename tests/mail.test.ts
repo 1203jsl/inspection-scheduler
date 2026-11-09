@@ -242,7 +242,7 @@ describe('발송 기록 덧붙이기', () => {
 describe('설정 구조 변환', () => {
   it('settings v3 → v4: 메일 템플릿·발송 설정 기본값 (발송 방식 기본은 수동, SMTP 서버는 비워 둠)', () => {
     const v4 = migrate('settings', { schemaVersion: 3, revision: 1, conflictRules: {} } as any);
-    expect(v4.schemaVersion).toBe(4);
+    expect(v4.schemaVersion).toBeGreaterThanOrEqual(4); // 이후 구조까지 이어서 바뀜
     expect(Object.keys(v4.mailTemplates)).toEqual(['registered', 'confirmed', 'changed', 'canceled', 'pass', 'fail']);
     expect(v4.mail).toEqual({ method: 'manual', smtp: { host: '', port: 587, security: 'starttls' }, webmailUrl: '', defaultCc: '' });
   });
