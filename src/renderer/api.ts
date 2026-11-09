@@ -1,5 +1,5 @@
 import type {
-  AppState, BackupEntry, DataFiles, FolderCheck, Result,
+  AppState, BackupEntry, DataFiles, FolderCheck, ImportPreview, ImportSummary, Result,
 } from '../shared/types';
 import type { LockStatus } from '../main/core/lock';
 
@@ -15,6 +15,12 @@ export interface Api {
   lockRelease(): Promise<Result<void>>;
   listBackups(): Promise<Result<BackupEntry[]>>;
   restoreBackup(id: string): Promise<Result<boolean>>;
+  saveTemplate(): Promise<Result<string | null>>;
+  pickImportFiles(): Promise<Result<string[]>>;
+  importPreview(paths: string[]): Promise<Result<ImportPreview>>;
+  importCommit(keys: string[]): Promise<Result<ImportSummary>>;
+  openDataFile(rel: string): Promise<Result<boolean>>;
+  pathForFile(f: File): string;
 }
 
 declare global {

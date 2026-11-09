@@ -1,4 +1,4 @@
-import { contextBridge, ipcRenderer } from 'electron';
+import { contextBridge, ipcRenderer, webUtils } from 'electron';
 
 const call = (ch: string) => (...args: unknown[]) => ipcRenderer.invoke(ch, ...args);
 
@@ -15,6 +15,13 @@ const api = {
   lockRelease: call('lock:release'),
   listBackups: call('backup:list'),
   restoreBackup: call('backup:restore'),
+  saveTemplate: call('template:save'),
+  pickImportFiles: call('import:pick'),
+  importPreview: call('import:preview'),
+  importCommit: call('import:commit'),
+  openDataFile: call('file:open'),
+  /** 끌어다 놓은 파일의 실제 경로 */
+  pathForFile: (f: File) => webUtils.getPathForFile(f),
 };
 
 contextBridge.exposeInMainWorld('api', api);

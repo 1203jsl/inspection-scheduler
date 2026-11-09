@@ -20,6 +20,8 @@ export function SettingsPage({ data, user, dataDir, onChangeFolder, onSaved, onS
   const [userMap, setUserMap] = useState<[string, string][]>(Object.entries(s.userMap ?? {}));
   const [lockMin, setLockMin] = useState(String(s.lockStaleMinutes));
   const [keep, setKeep] = useState(String(s.backupKeep));
+  const [items, setItems] = useState<string[]>(s.inspectionItems ?? []);
+  const [newItem, setNewItem] = useState('');
   const [dirty, setDirty] = useState(false);
   const [error, setError] = useState<AppErrorInfo | null>(null);
   const [backups, setBackups] = useState<BackupEntry[]>([]);
@@ -43,6 +45,15 @@ export function SettingsPage({ data, user, dataDir, onChangeFolder, onSaved, onS
     lock: !Number.isInteger(lockN) || lockN < 5 || lockN > 1440 ? '5~1440 사이의 정수(분)로 입력하세요.' : '',
     keep: !Number.isInteger(keepN) || keepN < 1 || keepN > 500 ? '1~500 사이의 정수로 입력하세요.' : '',
     map: userMap.some(([a, n]) => !a.trim() || !n.trim()) ? '계정과 표시 이름을 모두 입력하세요. 필요 없는 줄은 삭제하세요.' : '',
+    items: items.length === 0 ? '검수 품목을 하나 이상 등록하세요. 빈 양식의 드롭다운에 쓰입니다.' : '',
+  };
+  const trimmed = newItem.trim();
+  const dupItem = trimmed && items.includes(trimmed) ? '이미 있는 품목입니다.' : '';
+  const addItem = () => {
+    if (!trimmed || dupItem) return;
+    touch();
+    setItems([...items, trimmed]);
+    setNewItem('');
   };
   const hasInvalid = Object.values(invalid).some(Boolean);
 
@@ -50,7 +61,7 @@ export function SettingsPage({ data, user, dataDir, onChangeFolder, onSaved, onS
     setError(null);
     const map: Record<string, string> = {};
     for (const [a, n] of userMap) map[a.trim()] = n.trim();
-    const r = await api.save({ settings: { ...s, userMap: map, lockStaleMinutes: lockN, backupKeep: keepN } });
+    const r = await api.save({ settings: { ...s, userMap: map, lockStaleMinutes: lockN, backupKeep: keepN, inspectionItems: items } });
     if (r.ok) {
       await api.lockRelease();
       setDirty(false);
@@ -113,6 +124,24 @@ export function SettingsPage({ data, user, dataDir, onChangeFolder, onSaved, onS
           <button className="btn" type="button" onClick={() => { touch(); setUserMap([...userMap, ['', '']]); }}>줄 추가</button>
           <span className="help">이 PC 계정: {user.account} (선택된 줄)</span>
         </div>
+      </div>
+
+      <div className="card" style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+        <div className="card-h" style={{ margin: 0 }}>검수 품목 <span className="help" style={{ fontWeight: 400 }}>빈 양식의 드롭다운 목록, 가져오기 때 '알 수 없는 품목' 점검에 쓰입니다</span></div>
+        <div className="chips">
+          {items.map((it) => (
+            <span key={it} className="tagchip">{it}
+              <button type="button" aria-label={`${it} 삭제`} onClick={() => { touch(); setItems(items.filter((x) => x !== it)); }}>×</button>
+            </span>
+          ))}
+        </div>
+        <div style={{ display: 'flex', gap: 8, maxWidth: 420 }}>
+          <input className={`input${dupItem ? ' invalid' : ''}`} aria-label="추가할 검수 품목" placeholder="예: 가공품" value={newItem}
+            onChange={(e) => setNewItem(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && addItem()} />
+          <button className="btn" type="button" onClick={addItem} disabled={!trimmed || !!dupItem}>추가</button>
+        </div>
+        {(dupItem || invalid.items) && <span className="help help-err"><Icon name="error" />{dupItem || invalid.items}</span>}
+        <span className="help">목록을 바꾼 뒤에는 [빈 양식 내려받기]로 새 양식을 만들어 업체에 보내세요.</span>
       </div>
 
       <div className="card" style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>

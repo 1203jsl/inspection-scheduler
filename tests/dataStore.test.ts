@@ -33,7 +33,7 @@ describe('데이터 폴더 만들기·확인', () => {
       expect((await fs.stat(path.join(dir, d))).isDirectory()).toBe(true);
     }
     const s = JSON.parse(await fs.readFile(path.join(dir, 'data/settings.json'), 'utf8'));
-    expect(s.schemaVersion).toBe(1);
+    expect(s.schemaVersion).toBe(2);
     expect(s.revision).toBe(0);
     expect(s.userMap).toEqual({ 'kim.mj': '김민준' });
     const chk = await DataStore.checkFolder(dir);
@@ -60,7 +60,7 @@ describe('덮어쓰기 방지', () => {
   it('저장할 때마다 revision 이 1씩 오르고 저장자가 기록된다', async () => {
     const s = new DataStore(dir, KIM);
     const v = await s.load('vendors');
-    const saved = await s.save({ vendors: { ...v, items: [{ name: '한솔정밀' }] } });
+    const saved = await s.save({ vendors: { ...v, items: [{ name: '한솔정밀' }] as any } });
     expect(saved.vendors!.revision).toBe(1);
     expect(saved.vendors!.updatedByName).toBe('김민준');
     const again = await new DataStore(dir, LEE).load('vendors');
@@ -74,11 +74,11 @@ describe('덮어쓰기 방지', () => {
     const kv = await kim.load('vendors');
     const lv = await lee.load('vendors');
 
-    await lee.save({ vendors: { ...lv, items: [{ name: '대양산업' }] } });
+    await lee.save({ vendors: { ...lv, items: [{ name: '대양산업' }] as any } });
 
     let err: AppError | null = null;
     try {
-      await kim.save({ vendors: { ...kv, items: [{ name: '한솔정밀' }] } });
+      await kim.save({ vendors: { ...kv, items: [{ name: '한솔정밀' }] as any } });
     } catch (e) {
       err = e as AppError;
     }
@@ -94,9 +94,9 @@ describe('덮어쓰기 방지', () => {
     const lee = new DataStore(dir, LEE);
     await kim.load('vendors');
     const lv = await lee.load('vendors');
-    await lee.save({ vendors: { ...lv, items: [{ name: 'A' }] } });
+    await lee.save({ vendors: { ...lv, items: [{ name: 'A' }] as any } });
     const fresh = await kim.load('vendors');
-    const saved = await kim.save({ vendors: { ...fresh, items: [...fresh.items, { name: 'B' }] } });
+    const saved = await kim.save({ vendors: { ...fresh, items: [...fresh.items, { name: 'B' }] as any } });
     expect(saved.vendors!.revision).toBe(2);
   });
 
@@ -106,8 +106,8 @@ describe('덮어쓰기 방지', () => {
     const ki = await kim.load('inspections');
     const kv = await kim.load('vendors');
     const lv = await lee.load('vendors');
-    await lee.save({ vendors: { ...lv, items: [{ name: 'X' }] } });
-    expect(await code(kim.save({ inspections: { ...ki, items: [{ id: 1 }] }, vendors: kv }))).toBe('CONFLICT');
+    await lee.save({ vendors: { ...lv, items: [{ name: 'X' }] as any } });
+    expect(await code(kim.save({ inspections: { ...ki, items: [{ id: 1 }] as any }, vendors: kv }))).toBe('CONFLICT');
     const disk = JSON.parse(await fs.readFile(path.join(dir, 'data/inspections.json'), 'utf8'));
     expect(disk.items).toEqual([]);
     expect(disk.revision).toBe(0);
@@ -115,7 +115,7 @@ describe('덮어쓰기 방지', () => {
 
   it('불러오지 않은 파일은 저장할 수 없다', async () => {
     const kim = new DataStore(dir, KIM);
-    expect(await code(kim.save({ vendors: { items: [] } as any }))).toBe('UNKNOWN');
+    expect(await code(kim.save({ vendors: { items: [] as any } as any }))).toBe('UNKNOWN');
   });
 
   it('저장 중 임시 파일이 남지 않는다', async () => {
@@ -142,7 +142,7 @@ describe('손상·버전', () => {
 
   it('더 새 구조 버전이면 NEWER_SCHEMA', async () => {
     const f = path.join(dir, 'data/vendors.json');
-    await fs.writeFile(f, JSON.stringify({ schemaVersion: 99, revision: 3, items: [] }));
+    await fs.writeFile(f, JSON.stringify({ schemaVersion: 99, revision: 3, items: [] as any }));
     expect(await code(new DataStore(dir, KIM).load('vendors'))).toBe('NEWER_SCHEMA');
   });
 });
@@ -159,7 +159,7 @@ describe('백업·복원', () => {
     await s.save({ settings: { ...st, backupKeep: 3 } });
     for (let i = 0; i < 5; i++) {
       const v = await s.load('vendors');
-      await s.save({ vendors: { ...v, items: [{ n: i }] } });
+      await s.save({ vendors: { ...v, items: [{ n: i }] as any } });
     }
     const list = await s.listBackups();
     expect(list).toHaveLength(3);
@@ -173,9 +173,9 @@ describe('백업·복원', () => {
     let t = new Date(2026, 10, 9, 9, 0, 0).getTime();
     const kim = new DataStore(dir, KIM, () => new Date((t += 1000)));
     let v = await kim.load('vendors');
-    await kim.save({ vendors: { ...v, items: [{ name: '첫번째' }] } });
+    await kim.save({ vendors: { ...v, items: [{ name: '첫번째' }] as any } });
     v = await kim.load('vendors');
-    await kim.save({ vendors: { ...v, items: [{ name: '잘못 입력' }] } });
+    await kim.save({ vendors: { ...v, items: [{ name: '잘못 입력' }] as any } });
 
     const lee = new DataStore(dir, LEE);
     const lv = await lee.load('vendors'); // revision 2
@@ -192,7 +192,7 @@ describe('백업·복원', () => {
   it('손상된 파일도 복원으로 되살린다', async () => {
     const kim = new DataStore(dir, KIM);
     const v = await kim.load('vendors');
-    await kim.save({ vendors: { ...v, items: [{ ok: true }] } });
+    await kim.save({ vendors: { ...v, items: [{ ok: true }] as any } });
     const id = (await kim.listBackups())[0].id;
     await fs.writeFile(path.join(dir, 'data/vendors.json'), '{broken');
     await kim.restoreBackup(id);

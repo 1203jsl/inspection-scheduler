@@ -163,9 +163,13 @@ export class DataStore {
     const keys = Object.keys(changes) as DataFileKey[];
     if (keys.length === 0) return {};
 
-    // 1) 저장 직전 디스크 상태를 다시 확인
+    // 1) 저장 직전 디스크 상태를 다시 확인.
+    //    기준 revision 은 넘겨받은 데이터에 적힌 값(그 데이터를 읽었을 때의 번호),
+    //    없으면 마지막으로 불러온 번호를 씁니다.
+    const expected = new Map<DataFileKey, number>();
     for (const k of keys) {
-      const known = this.loadedRevision.get(k);
+      const own = (changes[k] as Partial<FileMeta> | undefined)?.revision;
+      const known = typeof own === 'number' ? own : this.loadedRevision.get(k);
       if (known === undefined) {
         throw new AppError('UNKNOWN', `${k} 데이터를 불러오지 않은 상태에서 저장하려고 했습니다. 새로 불러온 뒤 다시 저장하세요.`, { file: k });
       }
@@ -173,6 +177,7 @@ export class DataStore {
       if (disk.revision !== known) {
         throw conflictError(k, disk.updatedBy, disk.updatedByName, disk.updatedAt);
       }
+      expected.set(k, known);
     }
 
     // 2) 지금 상태 백업
@@ -184,7 +189,7 @@ export class DataStore {
     for (const k of keys) {
       const next = {
         ...(changes[k] as object),
-        revision: (this.loadedRevision.get(k) ?? 0) + 1,
+        revision: expected.get(k)! + 1,
         updatedBy: this.user.account,
         updatedByName: this.user.displayName,
         updatedAt: iso,

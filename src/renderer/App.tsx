@@ -3,6 +3,7 @@ import type { AppErrorInfo, AppState, DataFiles } from '../shared/types';
 import { api, fmtTime, type LockStatus } from './api';
 import { Alert, ConflictDialog, ErrorAlert, Icon, type IconName } from './components';
 import { FirstRun } from './FirstRun';
+import { ImportPage } from './ImportPage';
 import { SettingsPage } from './SettingsPage';
 import { StatusPage } from './StatusPage';
 
@@ -11,7 +12,7 @@ const NAV: { id: PageId; label: string; icon: IconName; step?: string }[] = [
   { id: 'dashboard', label: '대시보드', icon: 'home', step: '7단계' },
   { id: 'calendar', label: '달력', icon: 'calendar', step: '3단계' },
   { id: 'list', label: '목록', icon: 'list', step: '3단계' },
-  { id: 'import', label: '엑셀 가져오기', icon: 'upload', step: '2단계' },
+  { id: 'import', label: '엑셀 가져오기', icon: 'upload' },
   { id: 'vendors', label: '업체 관리', icon: 'building', step: '3단계' },
   { id: 'inspectors', label: '검수자 관리', icon: 'user', step: '3단계' },
   { id: 'settings', label: '설정', icon: 'gear' },
@@ -25,7 +26,7 @@ export function App() {
   const [loadError, setLoadError] = useState<AppErrorInfo | null>(null);
   const [conflict, setConflict] = useState<AppErrorInfo | null>(null);
   const [lock, setLock] = useState<LockStatus | null>(null);
-  const [page, setPage] = useState<PageId>('settings');
+  const [page, setPage] = useState<PageId>('import');
   const [flash, setFlash] = useState('');
 
   const reload = useCallback(async () => {
@@ -147,7 +148,10 @@ export function App() {
               onLockChange={setLock}
             />
           )}
-          {!loadError && data && page !== 'settings' && <StatusPage data={data} step={nav.step!} label={nav.label} />}
+          {!loadError && data && page === 'import' && (
+            <ImportPage onImported={() => reload()} onSaveError={handleSaveError} onLockChange={setLock} />
+          )}
+          {!loadError && data && nav.step && <StatusPage data={data} step={nav.step} label={nav.label} />}
         </div>
       </div>
       {conflict && (

@@ -1,8 +1,12 @@
-import { app, BrowserWindow, dialog, ipcMain } from 'electron';
+import { app, BrowserWindow, dialog, ipcMain, shell } from 'electron';
+import { promises as fs } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import type { CurrentUser, DataFiles, Result, Settings } from '../shared/types';
 import { DataStore } from './core/dataStore';
+import { buildTemplate } from './core/excel/template';
+import { ImportService } from './core/importService';
+import { templateDef } from './core/schema';
 import { AppError, toErrorInfo } from './core/errors';
 import { LockManager } from './core/lock';
 import { readLocalConfig, writeLocalConfig } from './core/localConfig';
@@ -14,6 +18,7 @@ let displayName = account;
 let dataDir: string | null = null;
 let store: DataStore | null = null;
 let lock: LockManager | null = null;
+let importer: ImportService | null = null;
 let lockStaleMinutes = 30;
 let win: BrowserWindow | null = null;
 
@@ -24,6 +29,7 @@ function openStore(dir: string) {
   dataDir = dir;
   store = new DataStore(dir, { account, displayName });
   lock = new LockManager(dir, me(), () => lockStaleMinutes);
+  importer = new ImportService(store, () => ({ account, displayName }));
 }
 
 function applySettings(s: Settings) {
@@ -103,6 +109,49 @@ handle('lock:release', async () => need(lock).release());
 handle('backup:list', async () => need(store).listBackups());
 handle('backup:restore', async (id: string) => {
   await need(store).restoreBackup(id);
+  return true;
+});
+
+// ───────── 엑셀 ─────────
+handle('template:save', async () => {
+  const s = await need(store).load('settings');
+  const def = templateDef(s);
+  const r = await dialog.showSaveDialog(win!, {
+    title: '빈 양식 저장',
+    defaultPath: path.join(app.getPath('downloads'), `검수신청_양식_${def.version}.xlsx`),
+    filters: [{ name: 'Excel 통합 문서', extensions: ['xlsx'] }],
+  });
+  if (r.canceled || !r.filePath) return null;
+  try {
+    await fs.writeFile(r.filePath, await buildTemplate(def, s.inspectionItems));
+  } catch (e) {
+    const code = (e as NodeJS.ErrnoException).code;
+    if (code === 'EBUSY' || code === 'EPERM') {
+      throw new AppError('FILE_BUSY', `같은 이름의 파일이 엑셀에서 열려 있어 저장하지 못했습니다. 파일을 닫거나 다른 이름으로 저장하세요.`);
+    }
+    throw e;
+  }
+  return r.filePath;
+});
+
+handle('import:pick', async () => {
+  const r = await dialog.showOpenDialog(win!, {
+    title: '업체가 보낸 엑셀 선택',
+    properties: ['openFile', 'multiSelections'],
+    filters: [{ name: 'Excel 통합 문서', extensions: ['xlsx'] }],
+  });
+  return r.canceled ? [] : r.filePaths;
+});
+handle('import:preview', async (paths: string[]) => need(importer).preview(paths));
+handle('import:commit', async (keys: string[]) => need(importer).commit(keys));
+
+/** 데이터 폴더 안의 파일 열기 (원본 엑셀 등) */
+handle('file:open', async (rel: string) => {
+  const root = need(dataDir);
+  const full = path.resolve(root, rel);
+  if (!full.startsWith(path.resolve(root) + path.sep)) throw new AppError('UNKNOWN', '데이터 폴더 밖의 파일은 열 수 없습니다.');
+  const err = await shell.openPath(full);
+  if (err) throw new AppError('UNKNOWN', `파일을 열 수 없습니다: ${err}`);
   return true;
 });
 

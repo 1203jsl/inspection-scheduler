@@ -6,7 +6,7 @@ await build({
   platform: 'node',
   format: 'cjs',
   target: 'node20',
-  external: ['electron'],
+  external: ['electron', 'exceljs'],
   sourcemap: true,
   logLevel: 'info',
 });
