@@ -136,7 +136,7 @@ export function SettingsPage({ data, user, dataDir, onChangeFolder, onSaved, onS
           ))}
         </div>
         <div style={{ display: 'flex', gap: 8, maxWidth: 420 }}>
-          <input className={`input${dupItem ? ' invalid' : ''}`} aria-label="추가할 검수 품목" placeholder="예: 가공품" value={newItem}
+          <input className={`input${dupItem ? ' invalid' : ''}`} aria-label="추가할 검수 품목" placeholder="예: FRAME" value={newItem}
             onChange={(e) => setNewItem(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && addItem()} />
           <button className="btn" type="button" onClick={addItem} disabled={!trimmed || !!dupItem}>추가</button>
         </div>

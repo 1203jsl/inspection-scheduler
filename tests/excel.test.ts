@@ -72,7 +72,7 @@ describe('빈 양식', () => {
     const meta = wb.getWorksheet('_meta')!;
     expect(meta.state).toBe('veryHidden');
     expect(meta.getCell('A2').value).toBe('v1');
-    expect(meta.getCell('B2').value).toBe('전장품');
+    expect(meta.getCell('B2').value).toBe('BODY');
     // 파일에 실제 기록된 유효성 검사 범위: 열마다 하나, 겹침 없음 (겹치면 엑셀이 '복구' 경고)
     const zip = await JSZip.loadAsync(buf);
     const xml = await zip.file('xl/worksheets/sheet1.xml')!.async('string');
@@ -124,7 +124,7 @@ describe('가져오기 판정', () => {
   it('열은 위치가 아니라 머리글 이름으로 찾는다 (순서 바뀜·다른 이름·제목 행)', async () => {
     const buf = await freeformFile(
       ['품명', '업체', '이메일', '담당자', '희망일', '수량', '검수품목'],
-      [['샤프트', '한솔정밀', 'kim@hansol.example.com', '김철수', '2026-12-01', 3, '기계부품']],
+      [['샤프트', '한솔정밀', 'kim@hansol.example.com', '김철수', '2026-12-01', 3, 'TANK']],
     );
     const r = await readWorkbook(buf, settings);
     expect(r.templateVersion).toBeUndefined();
@@ -135,7 +135,7 @@ describe('가져오기 판정', () => {
   });
 
   it('필수 열이 아예 없으면 파일 단위로 알려준다', async () => {
-    const buf = await freeformFile(['업체명', '검수 품목', '품명', '수량', '검수 희망일', '업체 담당자'], [['A', '기계부품', 'B', 1, '2026-12-01', 'C']]);
+    const buf = await freeformFile(['업체명', '검수 품목', '품명', '수량', '검수 희망일', '업체 담당자'], [['A', 'TANK', 'B', 1, '2026-12-01', 'C']]);
     await expect(readWorkbook(buf, settings)).rejects.toThrow("필수 열 '이메일'");
   });
 

@@ -31,7 +31,7 @@ export const TEMPLATE_V1: ExcelTemplateDef = {
   ],
 };
 
-export const DEFAULT_INSPECTION_ITEMS = ['기계부품', '전장품', '소모품'];
+export const DEFAULT_INSPECTION_ITEMS = ['TANK', 'BODY', 'VMB_TURN-KEY', 'UNITTURN-KEY', "Part's"];
 
 /**
  * 구조 변환표. MIGRATIONS[파일][옛 버전] = 옛 버전 → 다음 버전 변환.
