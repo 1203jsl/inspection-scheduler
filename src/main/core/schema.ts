@@ -1,6 +1,6 @@
 import type { DataFileKey, DataFiles, ExcelTemplateDef, FileMeta, Settings } from '../../shared/types';
 import { DEFAULT_CONFLICT_RULES } from '../../shared/conflicts';
-import { DEFAULT_MAIL_SETTINGS, DEFAULT_TEMPLATES } from '../../shared/mail';
+import { DEFAULT_MAIL_SETTINGS, DEFAULT_TEMPLATES, OLD_CONFIRMED_TEMPLATE } from '../../shared/mail';
 import { AppError } from './errors';
 
 /** 이 프로그램이 이해하는 최신 구조 버전 (파일별) */
@@ -8,7 +8,7 @@ export const CURRENT_SCHEMA: Record<DataFileKey, number> = {
   inspections: 2,
   vendors: 1,
   inspectors: 1,
-  settings: 5,
+  settings: 6,
   mail_log: 1,
 };
 
@@ -81,6 +81,17 @@ export const MIGRATIONS: Partial<Record<DataFileKey, Record<number, Migration>>>
         ? { ...d.conflictRules, sameSlot: { ...d.conflictRules.sameSlot, minutes: 30 } }
         : d.conflictRules,
     }),
+    // v5 → v6: 업체 회신은 확정 때 업체·날짜별로 묶어 보냄 → 확정 템플릿을 {목록} 형식으로
+    //          (사용자가 고친 템플릿은 그대로 둠)
+    5: (d) => {
+      const c = d.mailTemplates?.confirmed;
+      const untouched = c && c.subject === OLD_CONFIRMED_TEMPLATE.subject && c.body === OLD_CONFIRMED_TEMPLATE.body;
+      return {
+        ...d,
+        schemaVersion: 6,
+        mailTemplates: untouched ? { ...d.mailTemplates, confirmed: { ...DEFAULT_TEMPLATES.confirmed } } : d.mailTemplates,
+      };
+    },
   },
 };
 

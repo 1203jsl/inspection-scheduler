@@ -260,8 +260,8 @@ export interface ConflictRules {
 export type MailKind = 'registered' | 'confirmed' | 'changed' | 'canceled' | 'pass' | 'fail';
 
 export const MAIL_KIND_LABEL: Record<MailKind, string> = {
-  registered: '등록(신청번호 회신)',
-  confirmed: '확정',
+  registered: '등록(접수 안내)',
+  confirmed: '확정(회신)',
   changed: '변경',
   canceled: '취소',
   pass: '합격',
@@ -290,8 +290,10 @@ export interface MailLogEntry {
   at: string;
   by: string;
   byName: string;
-  /** 검수 건과 관계없는 시험 메일은 null */
+  /** 검수 건과 관계없는 시험 메일은 null. 여러 건을 묶은 메일은 첫 건 */
   inspectionId: string | null;
+  /** 한 통에 묶어 보낸 모든 신청번호 (묶음 메일) */
+  inspectionIds?: string[];
   kind: MailKind | 'test';
   to: string;
   cc: string;
@@ -314,6 +316,8 @@ export interface SmtpAccountInfo {
 
 export interface MailDraft {
   inspectionId: string | null;
+  /** 한 통에 묶는 신청번호들 (없으면 inspectionId 한 건) */
+  inspectionIds?: string[];
   kind: MailKind | 'test';
   to: string;
   cc: string;

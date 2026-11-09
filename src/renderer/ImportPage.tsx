@@ -51,7 +51,7 @@ export function ImportPage({ onImported, onSaveError, onLockChange }: {
   onSaveError: (e: AppErrorInfo) => AppErrorInfo | null;
   onLockChange: (l: LockStatus) => void;
 }) {
-  const { go, data } = useApp();
+  const { go } = useApp();
   const [preview, setPreview] = useState<ImportPreview | null>(null);
   const [include, setInclude] = useState<Set<string>>(new Set());
   const [busy, setBusy] = useState(false);
@@ -61,7 +61,6 @@ export function ImportPage({ onImported, onSaveError, onLockChange }: {
   // 메일 화면에 다녀와도 결과 요약을 유지 (새 파일을 넣으면 지움)
   const [summary, setSummaryState] = useState<ImportSummary | null>(lastSummary);
   const setSummary = (v: ImportSummary | null) => { lastSummary = v; setSummaryState(v); };
-  const replied = (id: string) => data.mail_log.items.some((m) => m.inspectionId === id && m.kind === 'registered' && m.result !== 'failed');
   const [confirmErrors, setConfirmErrors] = useState(false);
 
   const load = async (paths: string[]) => {
@@ -189,7 +188,7 @@ export function ImportPage({ onImported, onSaveError, onLockChange }: {
           </Alert>
           {summary.created.length > 0 && (
             <div className="card" style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-              <div className="card-h" style={{ margin: 0 }}>새로 부여한 신청번호 <span className="help" style={{ fontWeight: 400 }}>[메일 보내기]로 업체에 신청번호를 회신하세요</span></div>
+              <div className="card-h" style={{ margin: 0 }}>새로 부여한 신청번호 <span className="help" style={{ fontWeight: 400 }}>업체 회신 메일은 일정을 확정한 뒤 보냅니다 (같은 업체·같은 날 확정한 건은 한 통으로)</span></div>
               <div className="tbl-wrap">
                 <table className="tbl">
                   <thead><tr><th>신청번호</th><th>업체명</th><th>품명</th><th>받는 사람</th><th /></tr></thead>
@@ -198,13 +197,7 @@ export function ImportPage({ onImported, onSaveError, onLockChange }: {
                       <tr key={c.id}>
                         <td><b>{c.id}</b></td><td>{c.vendorName}</td><td>{c.itemName}</td><td>{c.contactEmail || <span className="muted">(없음)</span>}</td>
                         <td>
-                          {replied(c.id)
-                            ? <span className="cell-flag" style={{ color: 'var(--ok-fg)', fontWeight: 700 }}><Icon name="ok" />회신함</span>
-                            : (
-                              <button className="btn btn-sm" type="button" onClick={() => go({ page: 'mail', id: c.id, kind: 'registered', from: { page: 'import' } })}>
-                                <Icon name="mail" />메일 보내기
-                              </button>
-                            )}
+                          <button className="btn btn-sm" type="button" onClick={() => go({ page: 'detail', id: c.id, from: { page: 'import' } })}>상세 보기</button>
                         </td>
                       </tr>
                     ))}

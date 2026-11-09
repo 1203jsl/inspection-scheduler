@@ -1,7 +1,8 @@
-import { useMemo, useState } from 'react';
+import { useState } from 'react';
 import type { AppErrorInfo, Inspection, MailDraft, MailKind } from '../shared/types';
 import { MAIL_KIND_LABEL } from '../shared/types';
-import { fillTemplate, kindForStatus, mailVars, parseAddresses, pendingMail } from '../shared/mail';
+import { fmtMD } from '../shared/dates';
+import { fillTemplate, kindForStatus, mailCovers, mailGroup, mailVars, parseAddresses, pendingMail, recipientsFor } from '../shared/mail';
 import { api } from './api';
 import { Alert, ErrorAlert, Icon } from './components';
 import { useApp, useEditLock, type Route } from './ctx';
@@ -9,37 +10,46 @@ import { StatusBadge } from './ListPage';
 
 const KINDS = Object.keys(MAIL_KIND_LABEL) as MailKind[];
 
-/** 받는 사람 기본값: 엑셀에 적힌 업체 담당자, 없으면 업체 관리의 이메일 */
-function defaultTo(i: Inspection, vendorEmail: string, vendorName: string): string {
-  const email = i.contactEmail || vendorEmail;
-  if (!email) return '';
-  const name = i.contactEmail ? i.contactName : vendorName;
-  return name ? `${name} <${email}>` : email;
-}
-
 export function MailPage({ id, kind: initialKind, from }: { id: string; kind?: MailKind; from?: Route }) {
   const { data, user, go, inspectorName, reload } = useApp();
-  const insp = data.inspections.items.find((i) => i.id === id);
+  const all = data.inspections.items;
+  const log = data.mail_log.items;
+  const insp = all.find((i) => i.id === id);
   const settings = data.settings;
   const vendor = data.vendors.items.find((v) => v.name === insp?.vendorName);
+  const fallback = vendor ? { email: vendor.contactEmail, name: vendor.contactName } : undefined;
 
-  const startKind: MailKind = initialKind ?? (insp && (pendingMail(insp, data.mail_log.items) ?? kindForStatus(insp))) ?? 'registered';
-  const [kind, setKind] = useState<MailKind>(startKind);
-  const build = (k: MailKind) => {
-    if (!insp) return { subject: '', body: '', unknown: [] as string[] };
-    const vars = mailVars(insp, inspectorName, user.displayName);
+  /** 묶음 후보와 기본 선택: 아직 이 메일을 안 받은 건 (없으면 이 건만) */
+  const groupOf = (k: MailKind) => {
+    if (!insp) return { group: [] as Inspection[], sel: new Set<string>() };
+    const group = mailGroup(insp, all, k);
+    const unsent = group.filter((g) => !log.some((m) => mailCovers(m, g.id) && m.kind === k && m.result !== 'failed'));
+    const sel = new Set((unsent.length ? unsent : [insp]).map((g) => g.id));
+    sel.add(insp.id);
+    return { group, sel };
+  };
+  const fill = (k: MailKind, items: Inspection[]) => {
+    const vars = mailVars(items, inspectorName, user.displayName, k);
     const t = settings.mailTemplates[k];
     const s = fillTemplate(t.subject, vars), b = fillTemplate(t.body, vars);
-    return { subject: s.text, body: b.text, unknown: [...new Set([...s.unknown, ...b.unknown])] };
+    return { subject: s.text, body: b.text, unknown: [...new Set([...s.unknown, ...b.unknown])], to: recipientsFor(items, fallback) };
   };
-  const first = useMemo(() => build(startKind), []); // eslint-disable-line react-hooks/exhaustive-deps
-  const [to, setTo] = useState(insp ? defaultTo(insp, vendor?.contactEmail ?? '', vendor?.contactName ?? '') : '');
+
+  const startKind: MailKind = initialKind ?? (insp && (pendingMail(insp, log) ?? kindForStatus(insp))) ?? 'registered';
+  const [init] = useState(() => {
+    const g = groupOf(startKind);
+    return { ...g, ...fill(startKind, g.group.filter((x) => g.sel.has(x.id))) };
+  });
+  const [kind, setKind] = useState<MailKind>(startKind);
+  const [group, setGroup] = useState<Inspection[]>(init.group);
+  const [sel, setSel] = useState<Set<string>>(init.sel);
+  const [to, setTo] = useState(init.to);
   const [cc, setCc] = useState(settings.mail.defaultCc);
-  const [subject, setSubject] = useState(first.subject);
-  const [body, setBody] = useState(first.body);
-  const [unknown, setUnknown] = useState(first.unknown);
-  const candidates = (insp?.sources ?? []).map((s) => s.file);
-  const [attach, setAttach] = useState<{ path: string; on: boolean }[]>(candidates.map((p) => ({ path: p, on: false })));
+  const [subject, setSubject] = useState(init.subject);
+  const [body, setBody] = useState(init.body);
+  const [unknown, setUnknown] = useState(init.unknown);
+  const [extra, setExtra] = useState<{ path: string; on: boolean }[]>([]);
+  const [attachOn, setAttachOn] = useState<Set<string>>(new Set());
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<AppErrorInfo | null>(null);
   const [done, setDone] = useState('');
@@ -50,62 +60,95 @@ export function MailPage({ id, kind: initialKind, from }: { id: string; kind?: M
     return <Alert kind="warn" action={<button className="btn btn-sm" type="button" onClick={() => go({ page: 'list' })}>목록으로</button>}>신청번호 {id}를 찾을 수 없습니다.</Alert>;
   }
 
-  const manual = settings.mail.method === 'manual';
-  const changeKind = (k: MailKind) => {
-    setKind(k);
-    const b = build(k);
-    setSubject(b.subject);
-    setBody(b.body);
-    setUnknown(b.unknown);
+  const items = group.filter((g) => sel.has(g.id));
+  const apply = (k: MailKind, list: Inspection[]) => {
+    const f = fill(k, list);
+    setSubject(f.subject);
+    setBody(f.body);
+    setUnknown(f.unknown);
+    setTo(f.to);
   };
+  const changeKind = (k: MailKind) => {
+    const g = groupOf(k);
+    setKind(k);
+    setGroup(g.group);
+    setSel(g.sel);
+    apply(k, g.group.filter((x) => g.sel.has(x.id)));
+  };
+  const toggleItem = (gid: string) => {
+    const s = new Set(sel);
+    if (s.has(gid)) s.delete(gid); else s.add(gid);
+    if (s.size === 0) return; // 최소 한 건
+    setSel(s);
+    apply(kind, group.filter((g) => s.has(g.id)));
+  };
+
+  const manual = settings.mail.method === 'manual';
+  const candidates = [...new Set(items.flatMap((i) => i.sources.map((s) => s.file)))];
+  const attachList = [...candidates.map((p) => ({ path: p, local: false })), ...extra.map((e) => ({ path: e.path, local: true }))];
   const draft = (): MailDraft => ({
-    inspectionId: insp.id, kind, to, cc, subject, body, attachments: attach.filter((a) => a.on).map((a) => a.path),
+    inspectionId: items[0].id,
+    inspectionIds: items.map((i) => i.id),
+    kind, to, cc, subject, body,
+    attachments: attachList.filter((a) => attachOn.has(a.path)).map((a) => a.path),
   });
   const toCheck = parseAddresses(to), ccCheck = parseAddresses(cc);
   const addrErr = !to.trim() ? '받는 사람 이메일을 입력하세요. 업체 관리에서 업체 이메일을 등록할 수도 있습니다.'
     : toCheck.bad.length ? `이메일 형식이 올바르지 않습니다: ${toCheck.bad.join(', ')}` : '';
   const ccErr = ccCheck.bad.length ? `이메일 형식이 올바르지 않습니다: ${ccCheck.bad.join(', ')}` : '';
   const canSend = !addrErr && !ccErr && subject.trim() && !busy && !done;
+  const label = items.length > 1 ? `${items.length}건` : items[0].id;
 
   const run = async (fn: () => ReturnType<typeof api.mailSend>, okMsg: string) => {
     setBusy(true);
     setError(null);
     const r = await fn();
     setBusy(false);
-    if (r.ok) {
-      setDone(okMsg);
-      await reload();
-    } else {
-      setError(r.error);
-      await reload(); // 실패 기록도 이력에 보이게
-    }
+    if (r.ok) setDone(okMsg);
+    else setError(r.error);
+    await reload(); // 성공·실패 모두 이력에 보이게
   };
-  const copy = async (label: string, text: string) => {
+  const copy = async (what: string, text: string) => {
     const r = await api.copyText(text);
-    if (r.ok) setCopied(label);
+    if (r.ok) setCopied(what);
   };
   const back = () => go(from ?? { page: 'detail', id: insp.id });
 
   return (
     <>
       <Alert kind="info"><b>안내</b> · 업체에 보내는 메일은 반드시 미리보기를 확인한 뒤 발송합니다. 본문은 직접 수정할 수 있습니다.</Alert>
-      {done && (
-        <Alert kind="ok" action={<button className="btn btn-sm" type="button" onClick={back}>상세 화면으로</button>}>{done}</Alert>
-      )}
+      {done && <Alert kind="ok" action={<button className="btn btn-sm" type="button" onClick={back}>돌아가기</button>}>{done}</Alert>}
       {error && <ErrorAlert error={error} />}
 
       <div className="split" style={{ gridTemplateColumns: 'minmax(0, 1fr) 400px' }}>
         <div className="card" style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
           <div className="card-h" style={{ margin: 0 }}>
-            {MAIL_KIND_LABEL[kind]} 메일 · {insp.id} {insp.vendorName} <StatusBadge i={insp} />
+            {MAIL_KIND_LABEL[kind]} 메일 · {insp.vendorName} {items.length > 1 ? `${items.length}건` : insp.id} {items.length === 1 && <StatusBadge i={insp} />}
           </div>
           <div className="field">
             <label htmlFor="mk">메일 종류</label>
             <select id="mk" className="sel" style={{ maxWidth: 260 }} value={kind} disabled={!!done} onChange={(e) => changeKind(e.target.value as MailKind)}>
               {KINDS.map((k) => <option key={k} value={k}>{MAIL_KIND_LABEL[k]}{k === kindForStatus(insp) ? ' (현재 상태)' : ''}</option>)}
             </select>
-            <span className="help">종류를 바꾸면 제목·본문이 그 템플릿으로 다시 채워집니다.</span>
+            <span className="help">종류나 함께 보낼 건을 바꾸면 받는 사람·제목·본문이 다시 채워집니다.</span>
           </div>
+
+          {group.length > 1 && (
+            <fieldset className="field" style={{ border: '1px solid var(--border)', borderRadius: 'var(--radius-md)', padding: 12, margin: 0 }}>
+              <legend className="lbl" style={{ padding: '0 4px' }}>함께 보낼 건 · 같은 업체에 같은 날 확정한 {group.length}건</legend>
+              {group.map((g) => {
+                const sent = log.some((m) => mailCovers(m, g.id) && m.kind === kind && m.result !== 'failed');
+                return (
+                  <label key={g.id} className="radio" style={{ fontSize: 13 }}>
+                    <input type="checkbox" className="chk" checked={sel.has(g.id)} disabled={!!done || (sel.size === 1 && sel.has(g.id))} onChange={() => toggleItem(g.id)} />
+                    <b>{g.id}</b> {g.itemName} · {fmtMD(g.schedule.date)} {g.schedule.time ?? ''}
+                    {sent && <span className="cell-flag" style={{ color: 'var(--ok-fg)' }}><Icon name="ok" />이미 보냄</span>}
+                  </label>
+                );
+              })}
+            </fieldset>
+          )}
+
           <div className="field">
             <label htmlFor="mto">받는 사람 <span className="req">*</span></label>
             <input id="mto" className={`input${addrErr ? ' invalid' : ''}`} value={to} onChange={(e) => setTo(e.target.value)} disabled={!!done} />
@@ -129,26 +172,29 @@ export function MailPage({ id, kind: initialKind, from }: { id: string; kind?: M
           )}
           <div className="field">
             <span className="lbl">첨부파일</span>
-            {attach.length === 0 && <span className="help">첨부 후보가 없습니다.</span>}
-            {attach.map((a, k) => (
+            {attachList.length === 0 && <span className="help">첨부 후보가 없습니다.</span>}
+            {attachList.map((a) => (
               <label key={a.path} className="radio">
-                <input type="checkbox" className="chk" checked={a.on} disabled={!!done}
-                  onChange={(e) => setAttach(attach.map((x, j) => (j === k ? { ...x, on: e.target.checked } : x)))} />
+                <input type="checkbox" className="chk" checked={attachOn.has(a.path)} disabled={!!done}
+                  onChange={() => { const s = new Set(attachOn); s.has(a.path) ? s.delete(a.path) : s.add(a.path); setAttachOn(s); }} />
                 <Icon name="file" />{a.path.split(/[\\/]/).pop()}
-                {!candidates.includes(a.path) && <span className="muted">(이 PC의 파일)</span>}
+                {a.local && <span className="muted">(이 PC의 파일)</span>}
               </label>
             ))}
             <button className="btn btn-sm" type="button" style={{ alignSelf: 'flex-start' }} disabled={!!done} onClick={async () => {
               const r = await api.mailPickAttachments();
-              if (r.ok) setAttach([...attach, ...r.value.filter((p) => !attach.some((a) => a.path === p)).map((p) => ({ path: p, on: true }))]);
+              if (!r.ok) return;
+              const fresh = r.value.filter((p) => !attachList.some((a) => a.path === p));
+              setExtra([...extra, ...fresh.map((p) => ({ path: p, on: true }))]);
+              setAttachOn(new Set([...attachOn, ...fresh]));
             }}>파일 추가</button>
-            {manual && attach.some((a) => a.on) && <span className="help">수동 발송에서는 첨부파일을 웹메일에 직접 올려야 합니다.</span>}
+            {manual && attachOn.size > 0 && <span className="help">수동 발송에서는 첨부파일을 웹메일에 직접 올려야 합니다.</span>}
           </div>
           <div className="btn-row" style={{ justifyContent: 'flex-end' }}>
             <button className="btn" type="button" onClick={back}>{done ? '닫기' : '취소'}</button>
             {!manual && (
               <button className="btn btn-primary" type="button" disabled={!canSend}
-                onClick={() => run(() => api.mailSend(draft()), `${insp.id}: ${MAIL_KIND_LABEL[kind]} 메일을 보냈습니다. 메일 이력에 기록했습니다.`)}>
+                onClick={() => run(() => api.mailSend(draft()), `${label}: ${MAIL_KIND_LABEL[kind]} 메일을 보냈습니다. 메일 이력에 기록했습니다.`)}>
                 <Icon name="mail" />{busy ? '보내는 중…' : '발송'}
               </button>
             )}
@@ -177,7 +223,7 @@ export function MailPage({ id, kind: initialKind, from }: { id: string; kind?: M
             <div className="field">
               <span className="lbl">3. 발송을 마쳤다면</span>
               <button className="btn btn-primary" type="button" style={{ alignSelf: 'flex-start' }} disabled={!canSend}
-                onClick={() => run(() => api.mailRecordManual(draft()), `${insp.id}: ${MAIL_KIND_LABEL[kind]} 메일을 수동 발송으로 기록했습니다.`)}>
+                onClick={() => run(() => api.mailRecordManual(draft()), `${label}: ${MAIL_KIND_LABEL[kind]} 메일을 수동 발송으로 기록했습니다.`)}>
                 <Icon name="ok" />발송 완료로 기록
               </button>
             </div>
@@ -187,7 +233,7 @@ export function MailPage({ id, kind: initialKind, from }: { id: string; kind?: M
           <div className="card" style={{ display: 'flex', flexDirection: 'column', gap: 8, alignSelf: 'start' }}>
             <div className="card-h" style={{ margin: 0 }}>자동 발송 (SMTP)</div>
             <span className="help">서버: {settings.mail.smtp.host || '(입력 안 됨)'}:{settings.mail.smtp.port}</span>
-            <span className="help">[발송]을 누르면 이 PC에 저장한 메일 계정으로 보냅니다. 성공·실패는 메일 이력에 남습니다.</span>
+            <span className="help">[발송]을 누르면 이 PC에 저장한 내 메일 계정으로 보냅니다. 성공·실패는 메일 이력에 남습니다.</span>
             <button className="btn btn-sm" type="button" style={{ alignSelf: 'flex-start' }} onClick={() => go({ page: 'settings' })}>메일 발송 설정 열기</button>
           </div>
         )}

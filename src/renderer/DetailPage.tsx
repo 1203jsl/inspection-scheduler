@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import type { AppErrorInfo, HistoryEntry, Inspection, InspectionStatus, MailLogEntry } from '../shared/types';
 import { MAIL_KIND_LABEL, STATUS_LABEL } from '../shared/types';
-import { kindForStatus, pendingMail } from '../shared/mail';
+import { mailCovers, pendingMail } from '../shared/mail';
 import { fmtStamp, fmtYMD } from '../shared/dates';
 import {
   addNote, can, cancel, change, confirm, editRequest, FIELD_LABEL, nextAction, resultMissing, startNegotiation, WorkflowError,
@@ -49,7 +49,7 @@ export function DetailPage({ id, from }: { id: string; from?: Route }) {
     }
   };
 
-  const mails = data.mail_log.items.filter((m) => m.inspectionId === insp.id);
+  const mails = data.mail_log.items.filter((m) => mailCovers(m, insp.id));
   const pending = pendingMail(insp, data.mail_log.items);
   // 보낼 안내 메일이 남아 있으면 [메일 보내기]가 다음 할 일
   const primary = pending ? null : nextAction(insp);
@@ -87,11 +87,9 @@ export function DetailPage({ id, from }: { id: string; from?: Route }) {
             {btn('confirm', insp.status === 'changed' ? '재확정' : '확정', () => setDlg('confirm'))}
             {btn('change', '변경', () => setDlg('change'))}
             {can(insp, 'cancel') && <button className="btn btn-danger" type="button" onClick={() => setDlg('cancel')}>취소</button>}
-            {kindForStatus(insp) && (
-              <button className={`btn${pending ? ' btn-primary' : ''}`} type="button" onClick={() => go({ page: 'mail', id: insp.id, from: here })}>
-                <Icon name="mail" />메일 보내기
-              </button>
-            )}
+            <button className={`btn${pending ? ' btn-primary' : ''}`} type="button" onClick={() => go({ page: 'mail', id: insp.id, from: here })}>
+              <Icon name="mail" />메일 보내기
+            </button>
           </div>
         </div>
         {pending && <Alert kind="info"><b>안내</b> · {MAIL_KIND_LABEL[pending]} 안내 메일이 아직 발송되지 않았습니다.</Alert>}

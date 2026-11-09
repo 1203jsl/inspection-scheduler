@@ -5,7 +5,7 @@ import path from 'node:path';
 import type { AddressInfo } from 'node:net';
 import { SMTPServer } from 'smtp-server';
 import type { Inspection, MailDraft } from '../src/shared/types';
-import { DEFAULT_TEMPLATES, fillTemplate, mailVars, parseAddresses, pendingMail } from '../src/shared/mail';
+import { DEFAULT_TEMPLATES, fillTemplate, mailGroup, mailVars, OLD_CONFIRMED_TEMPLATE, parseAddresses, pendingMail, recipientsFor } from '../src/shared/mail';
 import { DataStore } from '../src/main/core/dataStore';
 import { AppError } from '../src/main/core/errors';
 import { appendMailLog, logEntry } from '../src/main/core/mailer';
@@ -37,16 +37,31 @@ function insp(over: Partial<Inspection> = {}): Inspection {
 const nameOf = (id: string | null) => (id === 'p1' ? '김민준' : '');
 
 describe('템플릿 치환', () => {
-  it('확정 템플릿에 검수 건 값이 채워진다', () => {
-    const v = mailVars(insp(), nameOf, '홍길동');
-    const subj = fillTemplate(DEFAULT_TEMPLATES.confirmed.subject, v);
-    expect(subj.text).toBe('[검수 일정 확정 안내] IN-2026-0001 베이스 플레이트 (한솔정밀)');
+  it('확정(회신) 템플릿에 신청번호·일정이 {목록}으로 채워진다', () => {
+    const i = insp({ confirmedAt: '2026-11-09T05:00:00.000Z' });
+    const v = mailVars([i], nameOf, '홍길동', 'confirmed');
+    expect(fillTemplate(DEFAULT_TEMPLATES.confirmed.subject, v).text).toBe('[검수 일정 확정 안내] 한솔정밀 1건 (2026-11-09(월))');
     const body = fillTemplate(DEFAULT_TEMPLATES.confirmed.body, v).text;
     expect(body).toContain('김철수 님께');
-    expect(body).toContain('- 검수 일시: 2026-12-02(수) 14:00');
-    expect(body).toContain('- 검수 장소: 수입검사실 B');
-    expect(body).toContain('- 담당 검수자: 김민준');
+    expect(body).toContain('검수 신청 1건의 일정이 아래와 같이 확정');
+    expect(body).toContain('- IN-2026-0001 · 베이스 플레이트 (BP-2205) · 수량 10\n  검수 일시: 2026-12-02(수) 14:00 · 장소: 수입검사실 B · 검수자: 김민준');
+    expect(body).toContain('[신청번호] 칸에 위 신청번호를 적어');
     expect(body).toContain('홍길동 드림');
+    expect(fillTemplate(DEFAULT_TEMPLATES.confirmed.body, v).unknown).toEqual([]);
+  });
+
+  it('여러 건을 묶으면 {목록}에 모두, {건수}는 개수, {신청번호}는 모두 나열', () => {
+    const a = insp({ confirmedAt: '2026-11-09T05:00:00.000Z' });
+    const b = insp({ id: 'IN-2026-0003', itemName: '커버', spec: '', quantity: 4, schedule: { date: '2026-12-03', time: '09:30', location: '조립동', inspectorId: null } });
+    const v = mailVars([a, b], nameOf, '홍길동', 'confirmed');
+    expect(v.건수).toBe('2');
+    expect(v.신청번호).toBe('IN-2026-0001, IN-2026-0003');
+    expect(v.목록.split('\n')).toEqual([
+      '- IN-2026-0001 · 베이스 플레이트 (BP-2205) · 수량 10',
+      '  검수 일시: 2026-12-02(수) 14:00 · 장소: 수입검사실 B · 검수자: 김민준',
+      '- IN-2026-0003 · 커버 · 수량 4',
+      '  검수 일시: 2026-12-03(목) 09:30 · 장소: 조립동',
+    ]);
   });
 
   it('디자인 표기({시간}{장소})도 받아 주고, 모르는 치환값은 그대로 두고 알려준다', () => {
@@ -80,8 +95,36 @@ describe('미발송 판단', () => {
     expect(pendingMail(insp(), [sent('confirmed', '2026-11-09T06:00:00.000Z')])).toBeNull();
     expect(pendingMail(insp(), [sent('confirmed', '2026-11-09T06:00:00.000Z', 'manual')])).toBeNull();
   });
-  it('일정협의중에는 보낼 메일이 없다', () => {
+  it('등록·일정협의중에는 업체에 보낼 메일이 없다 (회신은 확정 때)', () => {
+    expect(pendingMail(insp({ status: 'registered' }), [])).toBeNull();
     expect(pendingMail(insp({ status: 'negotiating' }), [])).toBeNull();
+  });
+  it('묶음 메일에 들어간 건은 모두 보낸 것으로 본다', () => {
+    const m = { inspectionId: 'IN-2026-0009', inspectionIds: ['IN-2026-0009', 'IN-2026-0001'], kind: 'confirmed', at: '2026-11-09T06:00:00.000Z', result: 'manual' } as any;
+    expect(pendingMail(insp(), [m])).toBeNull();
+  });
+});
+
+describe('확정 회신 묶음 (업체 × 확정한 날)', () => {
+  const at = (h: number, d = 9) => new Date(2026, 10, d, h).toISOString();
+  const base = { status: 'confirmed' as const, confirmedAt: at(10) };
+  const all = [
+    insp({ ...base, id: 'IN-2026-0001' }),
+    insp({ ...base, id: 'IN-2026-0002', confirmedAt: at(16), schedule: { date: '2026-12-01', time: '09:00', location: 'A', inspectorId: null } }),
+    insp({ ...base, id: 'IN-2026-0003', confirmedAt: at(10, 10) }), // 다른 날 확정
+    insp({ ...base, id: 'IN-2026-0004', vendorName: '대양산업' }), // 다른 업체
+    insp({ ...base, id: 'IN-2026-0005', status: 'changed' }), // 확정 상태 아님
+  ];
+  it('같은 업체·같은 날 확정한 건만 묶고 검수일 순으로 정렬', () => {
+    expect(mailGroup(all[0], all, 'confirmed').map((i) => i.id)).toEqual(['IN-2026-0002', 'IN-2026-0001']);
+    expect(mailGroup(all[2], all, 'confirmed').map((i) => i.id)).toEqual(['IN-2026-0003']);
+  });
+  it('확정 외 메일(변경·취소 등)은 그 건만', () => {
+    expect(mailGroup(all[0], all, 'changed').map((i) => i.id)).toEqual(['IN-2026-0001']);
+  });
+  it('받는 사람은 묶인 건의 담당자를 중복 없이, 없으면 업체 관리의 이메일', () => {
+    expect(recipientsFor([all[0], all[1]])).toBe('김철수 <kim@hansol.example.com>');
+    expect(recipientsFor([insp({ contactEmail: '' })], { email: 'office@hansol.example.com', name: '대표' })).toBe('대표 <office@hansol.example.com>');
   });
 });
 
@@ -170,12 +213,14 @@ describe('SMTP 발송 (시험용 메일 서버)', () => {
     const svc = new MailService(store, creds, () => HONG);
     const e = await svc.send(draft({ attachments: ['첨부/IN-2026-0001/일정표.txt'] }));
     expect(e).toMatchObject({ result: 'sent', method: 'smtp', inspectionId: 'IN-2026-0001', kind: 'confirmed', byName: '홍길동', attachments: ['일정표.txt'] });
-    expect(received).toHaveLength(1);
+    const g = await svc.send(draft({ inspectionIds: ['IN-2026-0001', 'IN-2026-0002'] }));
+    expect(g.inspectionIds).toEqual(['IN-2026-0001', 'IN-2026-0002']); // 묶음 메일은 모든 신청번호 기록
+    expect(received).toHaveLength(2);
     expect(received[0].to.sort()).toEqual(['kim@hansol.example.com', 'team@company.example']);
     expect(received[0].raw).toMatch(/Content-Disposition: attachment;\s*filename/);
     expect(received[0].raw).toContain(Buffer.from('hello').toString('base64'));
     const log = await store.load('mail_log');
-    expect(log.items).toHaveLength(1);
+    expect(log.items).toHaveLength(2);
     const files = (await fs.readdir(path.join(dir, 'data'))).map((f) => fs.readFile(path.join(dir, 'data', f), 'utf8'));
     for (const t of await Promise.all(files)) expect(t).not.toContain('right-pw');
   });
@@ -245,5 +290,16 @@ describe('설정 구조 변환', () => {
     expect(v4.schemaVersion).toBeGreaterThanOrEqual(4); // 이후 구조까지 이어서 바뀜
     expect(Object.keys(v4.mailTemplates)).toEqual(['registered', 'confirmed', 'changed', 'canceled', 'pass', 'fail']);
     expect(v4.mail).toEqual({ method: 'manual', smtp: { host: '', port: 587, security: 'starttls' }, webmailUrl: '', defaultCc: '' });
+  });
+});
+
+describe('설정 구조 변환 v6', () => {
+  it('고치지 않은 옛 확정 템플릿만 새 {목록} 형식으로 바꾼다', () => {
+    const base = { schemaVersion: 5, revision: 1, conflictRules: {}, mail: {} };
+    const a = migrate('settings', { ...base, mailTemplates: { ...DEFAULT_TEMPLATES, confirmed: OLD_CONFIRMED_TEMPLATE } } as any);
+    expect(a.mailTemplates.confirmed).toEqual(DEFAULT_TEMPLATES.confirmed);
+    const mine = { subject: '내가 고친 제목', body: '내 본문' };
+    const b = migrate('settings', { ...base, mailTemplates: { ...DEFAULT_TEMPLATES, confirmed: mine } } as any);
+    expect(b.mailTemplates.confirmed).toEqual(mine);
   });
 });

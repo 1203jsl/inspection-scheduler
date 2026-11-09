@@ -106,6 +106,7 @@ export function logEntry(d: MailDraft, user: { account: string; displayName: str
     by: user.account,
     byName: user.displayName,
     inspectionId: d.inspectionId,
+    ...(d.inspectionIds && d.inspectionIds.length > 1 ? { inspectionIds: [...d.inspectionIds] } : {}),
     kind: d.kind,
     to: d.to.trim(),
     cc: d.cc.trim(),
