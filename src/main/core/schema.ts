@@ -3,7 +3,7 @@ import { AppError } from './errors';
 
 /** 이 프로그램이 이해하는 최신 구조 버전 (파일별) */
 export const CURRENT_SCHEMA: Record<DataFileKey, number> = {
-  inspections: 1,
+  inspections: 2,
   vendors: 1,
   inspectors: 1,
   settings: 2,
@@ -38,6 +38,21 @@ export const DEFAULT_INSPECTION_ITEMS = ['TANK', 'BODY', 'VMB_TURN-KEY', 'UNITTU
  */
 type Migration = (data: any) => any;
 export const MIGRATIONS: Partial<Record<DataFileKey, Record<number, Migration>>> = {
+  inspections: {
+    // v1 → v2: 현재 일정(schedule)·확정 정보 추가. 처음에는 업체 희망값으로 채움
+    1: (d) => ({
+      ...d,
+      schemaVersion: 2,
+      items: (d.items ?? []).map((i: any) => ({
+        ...i,
+        schedule: i.schedule ?? { date: i.requestedDate ?? null, time: i.requestedTime ?? null, location: i.location ?? '', inspectorId: null },
+        confirmedAt: i.confirmedAt ?? null,
+        confirmedBy: i.confirmedBy ?? null,
+        negotiations: i.negotiations ?? [],
+        result: i.result ?? null,
+      })),
+    }),
+  },
   settings: {
     // v1 → v2: 엑셀 양식 정의와 검수 품목 목록 추가
     1: (d) => ({

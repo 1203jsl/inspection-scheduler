@@ -220,8 +220,9 @@ describe('가져오기 전체 흐름 (폴더에 저장)', () => {
     expect(a1.original.quantity).toBe(10); // 원래 신청값은 그대로
     expect(a1.sources).toHaveLength(2);
     expect(a1.history.filter((h) => h.action === 'field').map((h) => [h.field, h.from, h.to])).toEqual([
-      ['quantity', 10, 12], ['requestedDate', '2026-12-01', '2026-12-02'], ['note', '', '수량 변경'],
+      ['quantity', 10, 12], ['requestedDate', '2026-12-01', '2026-12-02'], ['schedule.date', '2026-12-01', '2026-12-02'], ['note', '', '수량 변경'],
     ]);
+    expect(a1.schedule.date).toBe('2026-12-02'); // 확정 전이라 현재 일정도 따라감
     expect((await store.load('vendors')).items[0].contactEmail).toBe('kim.new@hansol.example.com');
   });
 

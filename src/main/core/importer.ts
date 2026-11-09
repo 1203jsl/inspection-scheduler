@@ -174,6 +174,8 @@ export function finalizePreview(rows: PreviewRow[], ctx: ValidateContext): Previ
 
 // ───────── 적용 ─────────
 
+const PRE_CONFIRM: Inspection['status'][] = ['received', 'registered', 'negotiating'];
+
 export interface ApplyInput {
   rows: PreviewRow[];
   includeKeys: Set<string>;
@@ -197,7 +199,7 @@ export interface ApplyOutput {
 export function applyImport(inp: ApplyInput): ApplyOutput {
   const iso = inp.now.toISOString();
   const by = { at: iso, by: inp.user.account, byName: inp.user.displayName };
-  const inspections = inp.inspections.map((i) => ({ ...i, history: [...i.history], sources: [...i.sources] }));
+  const inspections = inp.inspections.map((i) => ({ ...i, schedule: { ...i.schedule }, history: [...i.history], sources: [...i.sources] }));
   const index = new Map(inspections.map((i) => [i.id, i]));
   const vendors = inp.vendors.map((v) => ({ ...v }));
   const created: Inspection[] = [];
@@ -224,8 +226,17 @@ export function applyImport(inp: ApplyInput): ApplyOutput {
         const next = fields[k];
         if (next === '' || next === null) continue;
         if (String(cur[k] ?? '') === String(next)) continue;
-        hist.push({ ...by, action: 'field', field: k, from: cur[k], to: next, reason: `업체 수정본 가져오기 (${row.fileName} ${row.rowNumber}행)` });
+        const reason = `업체 수정본 가져오기 (${row.fileName} ${row.rowNumber}행)`;
+        hist.push({ ...by, action: 'field', field: k, from: cur[k], to: next, reason });
         (cur as any)[k] = next;
+        // 아직 확정 전이면 현재 일정도 업체 희망값을 따라감 (확정 뒤에는 그대로 둠)
+        const sk = PRE_CONFIRM.includes(cur.status)
+          ? ({ requestedDate: 'date', requestedTime: 'time', location: 'location' } as const)[k as 'requestedDate' | 'requestedTime' | 'location']
+          : undefined;
+        if (sk && cur.schedule[sk] !== next) {
+          hist.push({ ...by, action: 'field', field: `schedule.${sk}`, from: cur.schedule[sk], to: next, reason });
+          (cur.schedule as any)[sk] = next;
+        }
       }
       cur.sources.push(source);
       cur.history.push(...hist);
@@ -238,13 +249,16 @@ export function applyImport(inp: ApplyInput): ApplyOutput {
         id,
         status: 'registered',
         original: { ...fields },
+        schedule: { date: fields.requestedDate, time: fields.requestedTime, location: fields.location, inspectorId: null },
+        confirmedAt: null,
+        confirmedBy: null,
         sources: [source],
         negotiations: [],
         result: null,
         attachments: [],
         history: [
           { ...by, action: 'created', reason: `엑셀 가져오기 (${row.fileName} ${row.rowNumber}행)${memo}` },
-          { ...by, action: 'status', from: 'received', to: 'registered', reason: `신청번호 ${id} 부여` },
+          { ...by, action: 'status', field: 'status', from: 'received', to: 'registered', reason: `신청번호 ${id} 부여` },
         ],
         createdAt: iso,
         createdBy: inp.user.displayName,

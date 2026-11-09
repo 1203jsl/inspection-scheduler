@@ -112,19 +112,60 @@ export interface SourceRef {
   importedBy: string;
 }
 
+/** 현재 검수 일정 (확정 전에는 업체 희망값, 확정·변경 후에는 우리가 정한 값) */
+export interface Schedule {
+  /** YYYY-MM-DD */
+  date: string | null;
+  /** HH:MM */
+  time: string | null;
+  location: string;
+  inspectorId: string | null;
+}
+
+export interface NegotiationNote {
+  at: string;
+  by: string;
+  byName: string;
+  text: string;
+}
+
+/** 검수 결과 (6단계에서 입력) */
+export interface InspectionResult {
+  verdict: 'pass' | 'fail';
+  date: string;
+  inspectorId: string | null;
+  failReason: string;
+  memo: string;
+  at: string;
+  by: string;
+}
+
 export interface Inspection extends RequestFields {
   /** 신청번호 IN-2026-0001 */
   id: string;
   status: InspectionStatus;
   /** 처음 신청한 값 (상세 화면의 '업체 신청 원본' 비교용) */
   original: RequestFields;
+  schedule: Schedule;
+  confirmedAt: string | null;
+  confirmedBy: string | null;
   sources: SourceRef[];
-  negotiations: unknown[];
-  result: unknown | null;
+  negotiations: NegotiationNote[];
+  result: InspectionResult | null;
   attachments: unknown[];
   history: HistoryEntry[];
   createdAt: string;
   createdBy: string;
+}
+
+export interface Inspector {
+  id: string;
+  name: string;
+  dept: string;
+  email: string;
+  /** 사용 안 함이면 배정 목록에서 빠짐 */
+  active: boolean;
+  createdAt: string;
 }
 
 export interface Vendor {
@@ -201,7 +242,7 @@ export interface Settings extends FileMeta {
 export type DataFiles = {
   inspections: ListFile<Inspection>;
   vendors: ListFile<Vendor>;
-  inspectors: ListFile<unknown>;
+  inspectors: ListFile<Inspector>;
   settings: Settings;
   mail_log: ListFile<unknown>;
 };

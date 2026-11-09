@@ -11,6 +11,9 @@ import { AppError, toErrorInfo } from './core/errors';
 import { LockManager } from './core/lock';
 import { readLocalConfig, writeLocalConfig } from './core/localConfig';
 
+// 날짜 입력 칸 등을 한국어 형식으로 (영문 Windows 에서도 동일하게)
+app.commandLine.appendSwitch('lang', 'ko-KR');
+
 // ───────── 상태 ─────────
 const account = os.userInfo().username;
 const host = os.hostname();
