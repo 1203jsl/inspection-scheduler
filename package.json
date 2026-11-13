@@ -1,8 +1,8 @@
 {
   "name": "inspection-scheduler",
   "productName": "검수일정 관리",
-  "version": "0.1.0",
-  "description": "외주업체 검수일정 관리",
+  "version": "1.0.0",
+  "description": "외주업체 검수일정 관리 (Windows)",
   "main": "dist/main/main.js",
   "private": true,
   "scripts": {
@@ -12,9 +12,11 @@
     "start": "npm run build && electron .",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
-    "samples": "vite-node scripts/make-samples.ts"
+    "samples": "vite-node scripts/make-samples.ts",
+    "dist": "npm run build && electron-builder --win --x64"
   },
   "devDependencies": {
+    "@fontsource/noto-sans-kr": "^5.3.1",
     "@types/node": "^22.20.5",
     "@types/nodemailer": "^8.0.2",
     "@types/react": "^19.3.0",
@@ -22,17 +24,63 @@
     "@types/smtp-server": "^3.5.13",
     "@vitejs/plugin-react": "^5.2.0",
     "electron": "^38.8.6",
+    "electron-builder": "^26.18.0",
     "esbuild": "^0.25.12",
+    "playwright": "^1.65.0",
+    "react": "^19.3.1",
+    "react-dom": "^19.3.1",
     "smtp-server": "^3.21.3",
     "typescript": "5.9",
     "vite": "^7.3.8",
     "vitest": "^3.2.7"
   },
   "dependencies": {
-    "@fontsource/noto-sans-kr": "^5.3.1",
     "exceljs": "^4.4.0",
-    "nodemailer": "^7.0.13",
-    "react": "^19.3.1",
-    "react-dom": "^19.3.1"
+    "nodemailer": "^7.0.13"
+  },
+  "author": "품질팀",
+  "build": {
+    "appId": "kr.co.company.inspection-scheduler",
+    "productName": "검수일정 관리",
+    "executableName": "InspectionScheduler",
+    "directories": {
+      "output": "release"
+    },
+    "files": [
+      "dist/**/*",
+      "!dist/**/*.map",
+      "package.json"
+    ],
+    "asar": true,
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "icon": "build/icon.ico"
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "검수일정 관리",
+      "uninstallDisplayName": "검수일정 관리",
+      "artifactName": "InspectionScheduler-Setup-${version}.exe",
+      "deleteAppDataOnUninstall": false,
+      "installerIcon": "build/icon.ico",
+      "uninstallerIcon": "build/icon.ico",
+      "language": "1042",
+      "installerLanguages": [
+        "ko_KR"
+      ],
+      "multiLanguageInstaller": false
+    },
+    "copyright": "품질팀 사내용"
   }
 }

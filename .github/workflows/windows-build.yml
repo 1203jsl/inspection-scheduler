@@ -1,0 +1,63 @@
+# Windows 설치파일 만들기 + 실제 Windows PC 에서 설치·실행 시험
+# GitHub 저장소 > Actions > "Windows 설치파일" > Run workflow 로 실행합니다.
+# 끝나면 실행 화면 아래 Artifacts 에서 설치파일(installer)을 내려받을 수 있습니다.
+name: Windows 설치파일
+
+on:
+  workflow_dispatch:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: windows-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: 패키지 설치
+        run: npm ci
+
+      - name: 자동 테스트
+        run: npm test
+
+      - name: 설치파일 만들기
+        run: npm run dist
+
+      - name: 설치 시험 (조용히 설치)
+        shell: pwsh
+        run: |
+          $ver = (Get-Content package.json -Raw | ConvertFrom-Json).version
+          $setup = "release\InspectionScheduler-Setup-$ver.exe"
+          $p = Start-Process -FilePath $setup -ArgumentList '/S' -Wait -PassThru
+          if ($p.ExitCode -ne 0) { throw "설치 실패 (종료 코드 $($p.ExitCode))" }
+          $exe = "$env:LOCALAPPDATA\Programs\InspectionScheduler\InspectionScheduler.exe"
+          if (!(Test-Path $exe)) { throw "설치된 실행 파일이 없습니다: $exe" }
+          "INSTALLED_EXE=$exe" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+
+      - name: 실행 시험 (설치된 프로그램으로 첫 실행 → 엑셀 가져오기)
+        run: node scripts/smoke-windows.cjs "$env:INSTALLED_EXE"
+        shell: pwsh
+
+      - name: 설치파일 올리기
+        uses: actions/upload-artifact@v4
+        with:
+          name: installer
+          path: release/InspectionScheduler-Setup-*.exe
+          if-no-files-found: error
+
+      - name: 실행 시험 화면 올리기
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: smoke-screenshots
+          path: smoke-output/
+          if-no-files-found: ignore
