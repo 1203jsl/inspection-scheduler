@@ -1,6 +1,7 @@
 import type { DataFileKey, DataFiles, ExcelTemplateDef, FileMeta, Settings } from '../../shared/types';
 import { DEFAULT_CONFLICT_RULES } from '../../shared/conflicts';
 import { DEFAULT_MAIL_SETTINGS, DEFAULT_TEMPLATES, OLD_CONFIRMED_TEMPLATE } from '../../shared/mail';
+import { DEFAULT_NOTIFY, DEFAULT_REMINDER_TEMPLATE } from '../../shared/reminders';
 import { AppError } from './errors';
 
 /** 이 프로그램이 이해하는 최신 구조 버전 (파일별) */
@@ -8,7 +9,7 @@ export const CURRENT_SCHEMA: Record<DataFileKey, number> = {
   inspections: 2,
   vendors: 1,
   inspectors: 1,
-  settings: 6,
+  settings: 7,
   mail_log: 1,
 };
 
@@ -92,6 +93,13 @@ export const MIGRATIONS: Partial<Record<DataFileKey, Record<number, Migration>>>
         mailTemplates: untouched ? { ...d.mailTemplates, confirmed: { ...DEFAULT_TEMPLATES.confirmed } } : d.mailTemplates,
       };
     },
+    // v6 → v7: 검수자 알림 설정·알림 메일 템플릿
+    6: (d) => ({
+      ...d,
+      schemaVersion: 7,
+      notify: d.notify ?? { ...DEFAULT_NOTIFY },
+      reminderTemplate: d.reminderTemplate ?? { ...DEFAULT_REMINDER_TEMPLATE },
+    }),
   },
 };
 
@@ -111,6 +119,8 @@ export function defaultSettings(user: string, name: string, now: string): Settin
     conflictRules: structuredClone(DEFAULT_CONFLICT_RULES),
     mailTemplates: structuredClone(DEFAULT_TEMPLATES),
     mail: structuredClone(DEFAULT_MAIL_SETTINGS),
+    notify: { ...DEFAULT_NOTIFY },
+    reminderTemplate: { ...DEFAULT_REMINDER_TEMPLATE },
   };
 }
 

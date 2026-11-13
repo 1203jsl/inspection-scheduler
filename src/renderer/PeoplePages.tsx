@@ -1,7 +1,9 @@
 import { useMemo, useState } from 'react';
+import { api } from './api';
+import { Dialog } from './components';
 import type { AppErrorInfo, Inspector, Vendor } from '../shared/types';
 import { fmtMD, monthEnd, monthStart } from '../shared/dates';
-import { Alert, ErrorAlert } from './components';
+import { Alert, ErrorAlert, Icon } from './components';
 import { useApp } from './ctx';
 import { InspectorDialog, VendorDialog } from './dialogs';
 import { StatusBadge } from './ListPage';
@@ -13,6 +15,8 @@ export function VendorsPage({ initial }: { initial?: string }) {
   const [q, setQ] = useState('');
   const [selName, setSelName] = useState(initial ?? data.vendors.items[0]?.name ?? '');
   const [dlg, setDlg] = useState<null | 'add' | 'edit'>(null);
+  const [sched, setSched] = useState<null | { from: string; to: string }>(null);
+  const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
   const items = data.inspections.items;
   const m0 = monthStart(today), m1 = monthEnd(today);
 
@@ -81,6 +85,7 @@ export function VendorsPage({ initial }: { initial?: string }) {
               <div className="card-h">{selected.name} · 검수 이력
                 <span className="more btn-row">
                   <a className="link" href="#" onClick={(e) => { e.preventDefault(); go({ page: 'list', preset: { vendor: selected.name } }); }}>목록에서 보기</a>
+                  <button className="btn btn-sm" type="button" onClick={() => { setMsg(null); setSched({ from: m0, to: m1 }); }}>일정 확인서</button>
                   <button className="btn btn-sm" type="button" onClick={() => setDlg('edit')}>수정</button>
                 </span>
               </div>
@@ -100,6 +105,25 @@ export function VendorsPage({ initial }: { initial?: string }) {
             </div>
           )}
         </div>
+      )}
+      {msg && <Alert kind={msg.ok ? 'ok' : 'danger'}>{msg.text}</Alert>}
+      {sched && selected && (
+        <Dialog title={`일정 확인서 · ${selected.name}`} footer={<>
+          <button className="btn" type="button" onClick={() => setSched(null)}>닫기</button>
+          <button className="btn btn-primary" type="button" disabled={!sched.from || !sched.to || sched.from > sched.to} onClick={async () => {
+            const r = await api.exportVendor({ vendor: selected.name, ...sched });
+            if (!r.ok) setMsg({ ok: false, text: r.error.message });
+            else if (r.value) setMsg({ ok: true, text: `일정 확인서를 저장했습니다: ${r.value}` });
+            if (!r.ok || r.value) setSched(null);
+          }}><Icon name="download" />엑셀로 저장</button>
+        </>}>
+          <span className="help">이 기간에 잡힌 {selected.name}의 검수 일정을 확인서(엑셀)로 만듭니다. 업체에 보내거나 출력할 때 씁니다.</span>
+          <div className="form-row">
+            <div className="field"><label htmlFor="sf">시작일</label><input id="sf" type="date" className="input" value={sched.from} onChange={(e) => setSched({ ...sched, from: e.target.value })} /></div>
+            <div className="field"><label htmlFor="st2">종료일</label><input id="st2" type="date" className={`input${sched.from > sched.to ? ' invalid' : ''}`} value={sched.to} onChange={(e) => setSched({ ...sched, to: e.target.value })} /></div>
+          </div>
+          {sched.from > sched.to && <span className="help help-err"><Icon name="error" />종료일이 시작일보다 앞입니다.</span>}
+        </Dialog>
       )}
       {dlg && (
         <VendorDialog

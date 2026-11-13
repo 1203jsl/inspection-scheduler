@@ -1,7 +1,14 @@
 import { useEffect, useRef, useState } from 'react';
-import type { AppErrorInfo, BackupEntry, ConflictRules, CurrentUser, DataFiles, MailKind, MailSettings, MailTemplate, RuleNum, SmtpAccountInfo } from '../shared/types';
+import type { AppErrorInfo, BackupEntry, ConflictRules, CurrentUser, DataFiles, MailKind, MailSettings, MailTemplate, NotifySettings, RuleNum, SmtpAccountInfo } from '../shared/types';
 import { MAIL_KIND_LABEL } from '../shared/types';
 import { DEFAULT_MAIL_SETTINGS, DEFAULT_TEMPLATES, PLACEHOLDERS, parseAddresses } from '../shared/mail';
+import { DEFAULT_NOTIFY, DEFAULT_REMINDER_TEMPLATE } from '../shared/reminders';
+
+/** 템플릿 탭: 업체 메일 6종 + 검수자 알림 */
+type TplKey = MailKind | 'reminder';
+const TPL_LABEL: Record<TplKey, string> = { ...MAIL_KIND_LABEL, reminder: '검수자 알림' };
+const REMINDER_PH = ['{검수자}', '{건수}', '{목록}', '{기간}', '{오늘}'];
+const defaultTpl = (k: TplKey) => (k === 'reminder' ? DEFAULT_REMINDER_TEMPLATE : DEFAULT_TEMPLATES[k]);
 import { DEFAULT_CONFLICT_RULES } from '../shared/conflicts';
 import { fmtYMD } from '../shared/dates';
 import { api, fmtDateTime, type LockStatus } from './api';
@@ -9,13 +16,14 @@ import { Alert, Dialog, ErrorAlert, Icon } from './components';
 
 /**
  * 설정: 구역 탭 + 화면 맨 아래 [설정 저장] 하나 (디자인 ScreenSettings).
- * 알림 탭은 7단계에서 추가합니다.
+ * 알림 탭: 검수자 알림(팝업·메일).
  */
-type Tab = 'conflict' | 'mailTpl' | 'mailSend' | 'excel' | 'folder' | 'user';
+type Tab = 'conflict' | 'mailTpl' | 'mailSend' | 'notify' | 'excel' | 'folder' | 'user';
 const TABS: { id: Tab; label: string }[] = [
   { id: 'conflict', label: '충돌 조건' },
   { id: 'mailTpl', label: '메일 템플릿' },
   { id: 'mailSend', label: '메일 발송 설정' },
+  { id: 'notify', label: '알림' },
   { id: 'excel', label: '엑셀 양식' },
   { id: 'folder', label: '데이터 폴더' },
   { id: 'user', label: '사용자' },
@@ -61,8 +69,13 @@ export function SettingsPage({ data, user, dataDir, onChangeFolder, onSaved, onS
   const [numText, setNumText] = useState<Record<string, string>>(
     Object.fromEntries(NUM_RULES.map((r) => [r.key, String((s.conflictRules ?? DEFAULT_CONFLICT_RULES)[r.key].value)])),
   );
-  const [templates, setTemplates] = useState<Record<MailKind, MailTemplate>>(structuredClone(s.mailTemplates ?? DEFAULT_TEMPLATES));
-  const [tplKind, setTplKind] = useState<MailKind>('registered');
+  const [templates, setTemplates] = useState<Record<TplKey, MailTemplate>>({
+    ...structuredClone(s.mailTemplates ?? DEFAULT_TEMPLATES),
+    reminder: { ...(s.reminderTemplate ?? DEFAULT_REMINDER_TEMPLATE) },
+  });
+  const [notify, setNotify] = useState<NotifySettings>({ ...(s.notify ?? DEFAULT_NOTIFY) });
+  const [daysText, setDaysText] = useState(String((s.notify ?? DEFAULT_NOTIFY).daysBefore));
+  const [tplKind, setTplKind] = useState<TplKey>('confirmed');
   const [mail, setMail] = useState<MailSettings>(structuredClone(s.mail ?? DEFAULT_MAIL_SETTINGS));
   const [portText, setPortText] = useState(String((s.mail ?? DEFAULT_MAIL_SETTINGS).smtp.port));
   const [acct, setAcct] = useState<SmtpAccountInfo | null>(null);
@@ -88,7 +101,8 @@ export function SettingsPage({ data, user, dataDir, onChangeFolder, onSaved, onS
     api.mailAccount().then((r) => { if (r.ok) { setAcct(r.value); setAcctText(r.value.account); } });
   }, []);
 
-  const setTpl = (k: MailKind, t: MailTemplate) => { touch(); setTemplates({ ...templates, [k]: t }); };
+  const setTpl = (k: TplKey, t: MailTemplate) => { touch(); setTemplates({ ...templates, [k]: t }); };
+  const setN = (n: Partial<NotifySettings>) => { touch(); setNotify({ ...notify, ...n }); };
   /** 치환값 칩: 마지막으로 누른 칸(제목/본문)의 커서 위치에 넣음 */
   const insertPh = (ph: string) => {
     const el = lastField.current === 'subject' ? subjRef.current : bodyRef.current;
@@ -125,15 +139,16 @@ export function SettingsPage({ data, user, dataDir, onChangeFolder, onSaved, onS
     map: userMap.some(([a, n]) => !a.trim() || !n.trim()) ? '계정과 표시 이름을 모두 입력하세요. 필요 없는 줄은 삭제하세요.' : '',
     items: items.length === 0 ? '검수 품목을 하나 이상 등록하세요. 빈 양식의 드롭다운에 쓰입니다.' : '',
     rules: NUM_RULES.some((r) => numErr(r.key)) ? '충돌 조건의 숫자를 확인하세요.' : '',
-    tpl: (Object.keys(templates) as MailKind[]).filter((k) => !templates[k].subject.trim()).map((k) => MAIL_KIND_LABEL[k]).join(', ')
-      ? `제목이 비어 있는 템플릿이 있습니다: ${(Object.keys(templates) as MailKind[]).filter((k) => !templates[k].subject.trim()).map((k) => MAIL_KIND_LABEL[k]).join(', ')}` : '',
+    tpl: (Object.keys(templates) as TplKey[]).some((k) => !templates[k].subject.trim())
+      ? `제목이 비어 있는 템플릿이 있습니다: ${(Object.keys(templates) as TplKey[]).filter((k) => !templates[k].subject.trim()).map((k) => TPL_LABEL[k]).join(', ')}` : '',
+    days: !(Number.isInteger(Number(daysText)) && Number(daysText) >= 0 && Number(daysText) <= 30) ? '0~30 사이의 정수로 입력하세요. (0이면 당일만)' : '',
     port: !(Number.isInteger(Number(portText)) && Number(portText) >= 1 && Number(portText) <= 65535) ? '1~65535 사이의 숫자로 입력하세요. (보통 SSL/TLS=465, STARTTLS=587)' : '',
     webmail: mail.webmailUrl.trim() && !/^https?:\/\/\S+$/.test(mail.webmailUrl.trim()) ? 'http:// 또는 https:// 로 시작하는 주소로 입력하세요.' : '',
     cc: parseAddresses(mail.defaultCc).bad.length ? `이메일 형식이 올바르지 않습니다: ${parseAddresses(mail.defaultCc).bad.join(', ')}` : '',
     acct: acctText.trim() && parseAddresses(acctText).bad.length ? '메일 계정은 이메일 주소로 입력하세요. 예: hong@company.co.kr' : '',
   };
   const tabHasError: Record<Tab, boolean> = {
-    conflict: !!invalid.rules, mailTpl: !!invalid.tpl, mailSend: !!(invalid.port || invalid.webmail || invalid.cc || invalid.acct),
+    conflict: !!invalid.rules, mailTpl: !!invalid.tpl, mailSend: !!(invalid.port || invalid.webmail || invalid.cc || invalid.acct), notify: !!invalid.days,
     excel: !!invalid.items, folder: !!(invalid.lock || invalid.keep), user: !!invalid.map,
   };
   const hasInvalid = Object.values(invalid).some(Boolean);
@@ -171,7 +186,10 @@ export function SettingsPage({ data, user, dataDir, onChangeFolder, onSaved, onS
     const r = await api.save({
       settings: {
         ...s, userMap: map, lockStaleMinutes: lockN, backupKeep: keepN, inspectionItems: items, conflictRules: nextRules,
-        mailTemplates: templates, mail: nextMail,
+        mailTemplates: Object.fromEntries((Object.keys(MAIL_KIND_LABEL) as MailKind[]).map((k) => [k, templates[k]])) as Record<MailKind, MailTemplate>,
+        mail: nextMail,
+        reminderTemplate: templates.reminder,
+        notify: { ...notify, daysBefore: Number(daysText) },
       },
     });
     if (r.ok) {
@@ -267,11 +285,11 @@ export function SettingsPage({ data, user, dataDir, onChangeFolder, onSaved, onS
 
       {tab === 'mailTpl' && (
         <div className="card" role="tabpanel" style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-          <div className="card-h" style={{ margin: 0 }}>메일 템플릿 <span className="help" style={{ fontWeight: 400 }}>업체 담당자에게 가는 메일. 보내기 전 미리보기에서 다시 고칠 수 있습니다.</span></div>
+          <div className="card-h" style={{ margin: 0 }}>메일 템플릿 <span className="help" style={{ fontWeight: 400 }}>{tplKind === 'reminder' ? '우리 검수자에게 가는 알림 메일 (알림 탭에서 켜고 끔)' : '업체 담당자에게 가는 메일. 보내기 전 미리보기에서 다시 고칠 수 있습니다.'}</span></div>
           <div className="tabs" role="tablist" aria-label="메일 종류">
-            {(Object.keys(MAIL_KIND_LABEL) as MailKind[]).map((k) => (
+            {(Object.keys(TPL_LABEL) as TplKey[]).map((k) => (
               <button key={k} className="tab" role="tab" type="button" aria-selected={tplKind === k} onClick={() => setTplKind(k)}>
-                {MAIL_KIND_LABEL[k]}{!templates[k].subject.trim() && <Icon name="error" style={{ marginLeft: 4, color: 'var(--danger-fg)' }} />}
+                {TPL_LABEL[k]}{!templates[k].subject.trim() && <Icon name="error" style={{ marginLeft: 4, color: 'var(--danger-fg)' }} />}
               </button>
             ))}
           </div>
@@ -288,17 +306,17 @@ export function SettingsPage({ data, user, dataDir, onChangeFolder, onSaved, onS
                   onFocus={() => (lastField.current = 'body')} onChange={(e) => setTpl(tplKind, { ...templates[tplKind], body: e.target.value })} />
               </div>
               <div className="btn-row">
-                <button className="btn btn-sm" type="button" onClick={() => setTpl(tplKind, { ...DEFAULT_TEMPLATES[tplKind] })}>기본 문구로 되돌리기</button>
+                <button className="btn btn-sm" type="button" onClick={() => setTpl(tplKind, { ...defaultTpl(tplKind) })}>기본 문구로 되돌리기</button>
               </div>
             </div>
             <div className="field">
               <span className="lbl">사용 가능한 치환값</span>
               <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-                {PLACEHOLDERS.map((ph) => (
+                {(tplKind === 'reminder' ? REMINDER_PH : PLACEHOLDERS).map((ph) => (
                   <button key={ph} type="button" className="tag" style={{ cursor: 'pointer', background: 'var(--surface)' }} onClick={() => insertPh(ph)}>{ph}</button>
                 ))}
               </div>
-              <span className="help">누르면 마지막으로 누른 칸(제목/본문)의 커서 위치에 들어갑니다. {'{결과}·{불합격사유}'}는 합격/불합격 메일에 씁니다.</span>
+              <span className="help">누르면 마지막으로 누른 칸(제목/본문)의 커서 위치에 들어갑니다. {tplKind === 'reminder' ? '{목록}에는 검수자에게 배정된 일정이 한 줄씩 들어갑니다.' : '{목록}·{건수}는 묶음 메일(확정 회신), {결과}·{불합격사유}는 합격/불합격 메일에 씁니다.'}</span>
             </div>
           </div>
         </div>
@@ -375,6 +393,33 @@ export function SettingsPage({ data, user, dataDir, onChangeFolder, onSaved, onS
               {invalid.cc && <span className="help help-err"><Icon name="error" />{invalid.cc}</span>}
             </div>
           </div>
+        </div>
+      )}
+
+      {tab === 'notify' && (
+        <div className="card" role="tabpanel">
+          <div className="card-h">알림 <span className="help" style={{ fontWeight: 400 }}>우리 쪽 검수자에게만 보냅니다. 업체에는 가지 않습니다.</span></div>
+          <div className="rule">
+            <span className="nm">검수 며칠 전부터 알릴지</span>
+            <input className={`input${invalid.days ? ' invalid' : ''}`} style={{ width: 80 }} inputMode="numeric" aria-label="며칠 전" value={daysText}
+              onChange={(e) => { touch(); setDaysText(e.target.value); }} />
+            <span className="muted">일 전</span>
+            {invalid.days && <span className="help help-err"><Icon name="error" />{invalid.days}</span>}
+          </div>
+          <div className="rule">
+            <Switch label="프로그램 실행 시 팝업 알림" checked={notify.popup} onChange={(v) => setN({ popup: v })} />
+            <span className="help" style={{ width: 300 }}>실행할 때와 날짜가 바뀔 때, 이 PC 사용자와 연결된 검수자의 다가오는 검수를 보여줍니다.</span>
+          </div>
+          <div className="rule">
+            <Switch label="검수자에게 알림 메일 보내기" checked={notify.mail} onChange={(v) => setN({ mail: v })} />
+            <span className="help" style={{ width: 300 }}>그날 처음 프로그램을 연 PC가 한 번만 보냅니다. 자동(SMTP) 발송 방식이고 그 PC에 메일 계정이 저장돼 있어야 합니다.</span>
+          </div>
+          <div className="rule">
+            <Switch label="알림 메일 보내기 전에 미리보기" checked={notify.mailPreview} onChange={(v) => setN({ mailPreview: v })} />
+            <span className="help" style={{ width: 300 }}>꺼 두면 확인 없이 바로 보냅니다 (내부용).</span>
+          </div>
+          {notify.mail && mail.method !== 'smtp' && <Alert kind="warn">발송 방식이 수동이라 알림 메일은 보내지 않습니다. 메일 발송 설정에서 자동(SMTP)을 고르세요.</Alert>}
+          <span className="help">검수자와 PC 연결은 검수자 관리에서 'Windows 계정'으로 정합니다. 알림 메일 문구는 메일 템플릿의 '검수자 알림'에서 고칩니다.</span>
         </div>
       )}
 

@@ -2,6 +2,8 @@ import type {
   AppState, Attachment, AttachmentKind, BackupEntry, DataFiles, FolderCheck, ImportPreview, ImportSummary, MailDraft, MailLogEntry, Result, SmtpAccountInfo,
 } from '../shared/types';
 import type { LockStatus } from '../main/core/lock';
+import type { ReminderRun } from '../main/core/reminders';
+export type { ReminderRun };
 
 export interface Api {
   getState(): Promise<Result<AppState>>;
@@ -32,6 +34,10 @@ export interface Api {
   attachPick(): Promise<Result<string[]>>;
   attachAdd(id: string, paths: string[], kind: AttachmentKind): Promise<Result<Attachment[]>>;
   attachRemove(id: string, attachmentId: string): Promise<Result<boolean>>;
+  reminderAuto(): Promise<Result<ReminderRun>>;
+  reminderSend(drafts: MailDraft[]): Promise<Result<ReminderRun>>;
+  exportList(ids: string[], filter: string): Promise<Result<string | null>>;
+  exportVendor(o: { vendor: string; from: string; to: string }): Promise<Result<string | null>>;
   pathForFile(f: File): string;
 }
 

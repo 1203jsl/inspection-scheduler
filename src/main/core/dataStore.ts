@@ -9,6 +9,10 @@ import { defaultFile, migrate } from './schema';
 /** 데이터 폴더 안의 하위 폴더 이름 */
 export const DIRS = { data: 'data', original: '원본', attach: '첨부', backup: '백업' } as const;
 export const LOCK_FILE = '.lock';
+/** 저장 잠금 파일 (data/ 안, 저장하는 동안만 존재) */
+export const WRITE_LOCK = '.writing';
+const WRITE_LOCK_WAIT_MS = 5_000;
+const WRITE_LOCK_STALE_MS = 15_000;
 
 export interface StoreUser {
   account: string;
@@ -160,6 +164,45 @@ export class DataStore {
    */
   async save(changes: Partial<DataFiles>): Promise<Partial<DataFiles>> {
     await this.ensureRoot();
+    return this.withWriteLock(() => this.saveLocked(changes));
+  }
+
+  /**
+   * 저장 잠금: '확인 → 쓰기' 사이에 다른 PC가 끼어들지 못하게 data/.writing 파일을 독점 생성합니다.
+   * 다른 PC가 쓰는 중이면 잠깐 기다리고, 오래된 잠금(프로그램이 멈춘 PC)은 지웁니다.
+   */
+  private async withWriteLock<T>(fn: () => Promise<T>): Promise<T> {
+    const lock = path.join(this.root, DIRS.data, WRITE_LOCK);
+    const deadline = Date.now() + WRITE_LOCK_WAIT_MS;
+    for (;;) {
+      try {
+        const fh = await fs.open(lock, 'wx');
+        await fh.writeFile(JSON.stringify({ by: this.user.displayName || this.user.account, at: new Date().toISOString() }));
+        await fh.close();
+        break;
+      } catch (e) {
+        const code = (e as NodeJS.ErrnoException).code;
+        if (code === 'ENOENT') throw folderMissing(this.root);
+        if (code !== 'EEXIST') throw e;
+        const st = await fs.stat(lock).catch(() => null);
+        if (st && Date.now() - st.mtimeMs > WRITE_LOCK_STALE_MS) {
+          await fs.rm(lock, { force: true });
+          continue;
+        }
+        if (Date.now() > deadline) {
+          throw new AppError('FILE_BUSY', '다른 PC가 저장하는 중이라 기다렸지만 끝나지 않았습니다. 잠시 후 다시 저장하세요.');
+        }
+        await new Promise((r) => setTimeout(r, 40 + Math.random() * 60));
+      }
+    }
+    try {
+      return await fn();
+    } finally {
+      await fs.rm(lock, { force: true }).catch(() => {});
+    }
+  }
+
+  private async saveLocked(changes: Partial<DataFiles>): Promise<Partial<DataFiles>> {
     const keys = Object.keys(changes) as DataFileKey[];
     if (keys.length === 0) return {};
 
@@ -277,6 +320,10 @@ export class DataStore {
     const src = path.join(this.backupDir(), id);
     if (!(await isDir(src))) throw new AppError('UNKNOWN', `백업(${id})을 찾을 수 없습니다. 목록을 새로 불러오세요.`);
     await this.ensureRoot();
+    await this.withWriteLock(() => this.restoreLocked(src));
+  }
+
+  private async restoreLocked(src: string): Promise<void> {
     await this.backup();
     const iso = this.now().toISOString();
     for (const k of DATA_FILE_KEYS) {

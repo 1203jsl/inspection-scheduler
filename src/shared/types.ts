@@ -181,6 +181,8 @@ export interface Inspector {
   email: string;
   /** 사용 안 함이면 배정 목록에서 빠짐 */
   active: boolean;
+  /** 이 검수자가 쓰는 PC의 Windows 계정 (팝업 알림을 이 사람 PC에 띄우기 위해) */
+  account?: string;
   createdAt: string;
 }
 
@@ -310,16 +312,30 @@ export interface MailLogEntry {
   inspectionId: string | null;
   /** 한 통에 묶어 보낸 모든 신청번호 (묶음 메일) */
   inspectionIds?: string[];
-  kind: MailKind | 'test';
+  kind: MailKind | 'test' | 'reminder';
   to: string;
   cc: string;
   subject: string;
   body: string;
   attachments: string[];
   method: 'smtp' | 'manual';
-  /** sent: 자동 발송 성공 / failed: 실패 / manual: 수동 발송 완료로 기록 */
-  result: 'sent' | 'failed' | 'manual';
+  /** sent: 자동 발송 성공 / failed: 실패 / manual: 수동 발송 완료로 기록 / claimed: 알림 메일 보내는 중(다른 PC 중복 방지) */
+  result: 'sent' | 'failed' | 'manual' | 'claimed';
   error?: string;
+  /** 검수자 알림: 어느 날 알림인지 (YYYY-MM-DD) */
+  reminderDate?: string;
+  /** 검수자 알림: 받는 검수자 */
+  inspectorId?: string;
+}
+
+/** 검수자 알림 설정 (우리 쪽 검수자에게만) */
+export interface NotifySettings {
+  /** 검수 며칠 전부터 알릴지 (0이면 당일만) */
+  daysBefore: number;
+  popup: boolean;
+  mail: boolean;
+  /** 알림 메일을 보내기 전에 미리보기로 확인할지 */
+  mailPreview: boolean;
 }
 
 /** 이 PC에 저장된 SMTP 계정 (비밀번호는 화면에 돌려주지 않음) */
@@ -334,11 +350,14 @@ export interface MailDraft {
   inspectionId: string | null;
   /** 한 통에 묶는 신청번호들 (없으면 inspectionId 한 건) */
   inspectionIds?: string[];
-  kind: MailKind | 'test';
+  kind: MailKind | 'test' | 'reminder';
   to: string;
   cc: string;
   subject: string;
   body: string;
+  /** 검수자 알림 메일일 때 */
+  reminderDate?: string;
+  inspectorId?: string;
   /** 첨부 파일: 데이터 폴더 기준 상대 경로 또는 PC의 절대 경로 */
   attachments: string[];
 }
@@ -359,6 +378,9 @@ export interface Settings extends FileMeta {
   conflictRules: ConflictRules;
   mailTemplates: Record<MailKind, MailTemplate>;
   mail: MailSettings;
+  notify: NotifySettings;
+  /** 검수자 알림 메일 템플릿 */
+  reminderTemplate: MailTemplate;
 }
 
 export type DataFiles = {

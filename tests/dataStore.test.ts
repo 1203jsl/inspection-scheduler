@@ -114,6 +114,34 @@ describe('덮어쓰기 방지', () => {
     expect(disk.revision).toBe(0);
   });
 
+  it('같은 순간에 둘이 저장해도 한 명만 저장되고 다른 한 명은 충돌 안내 (조용히 덮어쓰지 않음)', async () => {
+    for (let round = 0; round < 5; round++) {
+      const kim = new DataStore(dir, KIM);
+      const lee = new DataStore(dir, LEE);
+      const kv = await kim.load('vendors');
+      const lv = await lee.load('vendors');
+      const res = await Promise.allSettled([
+        kim.save({ vendors: { ...kv, items: [...kv.items, { name: `김${round}` }] as any } }),
+        lee.save({ vendors: { ...lv, items: [...lv.items, { name: `이${round}` }] as any } }),
+      ]);
+      expect(res.filter((r) => r.status === 'fulfilled')).toHaveLength(1);
+      const rej = res.find((r) => r.status === 'rejected') as PromiseRejectedResult;
+      expect((rej.reason as AppError).code).toBe('CONFLICT');
+    }
+    const files = await fs.readdir(path.join(dir, 'data'));
+    expect(files).not.toContain('.writing'); // 잠금은 끝나면 지워짐
+  });
+
+  it('멈춘 PC가 남긴 오래된 저장 잠금은 무시하고 저장한다', async () => {
+    const lock = path.join(dir, 'data', '.writing');
+    await fs.writeFile(lock, '{}');
+    const old = new Date(Date.now() - 60_000);
+    await fs.utimes(lock, old, old);
+    const kim = new DataStore(dir, KIM);
+    const v = await kim.load('vendors');
+    await expect(kim.save({ vendors: v })).resolves.toBeDefined();
+  });
+
   it('불러오지 않은 파일은 저장할 수 없다', async () => {
     const kim = new DataStore(dir, KIM);
     expect(await code(kim.save({ vendors: { items: [] as any } as any }))).toBe('UNKNOWN');

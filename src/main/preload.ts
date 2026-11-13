@@ -31,6 +31,10 @@ const api = {
   attachPick: call('attach:pick'),
   attachAdd: call('attach:add'),
   attachRemove: call('attach:remove'),
+  reminderAuto: call('reminder:auto'),
+  reminderSend: call('reminder:send'),
+  exportList: call('export:list'),
+  exportVendor: call('export:vendor'),
   /** 끌어다 놓은 파일의 실제 경로 */
   pathForFile: (f: File) => webUtils.getPathForFile(f),
 };

@@ -50,7 +50,7 @@ export function DetailPage({ id, from }: { id: string; from?: Route }) {
     }
   };
 
-  const mails = data.mail_log.items.filter((m) => mailCovers(m, insp.id));
+  const mails = data.mail_log.items.filter((m) => mailCovers(m, insp.id) && m.result !== 'claimed');
   const pending = pendingMail(insp, data.mail_log.items);
   // 보낼 안내 메일이 남아 있으면 [메일 보내기]가 다음 할 일
   const primary = pending ? null : nextAction(insp, today);
@@ -270,6 +270,7 @@ const RESULT: Record<MailLogEntry['result'], { icon: 'ok' | 'error'; label: stri
   sent: { icon: 'ok', label: '발송 성공', color: 'var(--ok-fg)' },
   manual: { icon: 'ok', label: '수동 발송 기록', color: 'var(--ok-fg)' },
   failed: { icon: 'error', label: '발송 실패', color: 'var(--danger-fg)' },
+  claimed: { icon: 'ok', label: '보내는 중', color: 'var(--ink-muted)' },
 };
 
 function MailHistory({ mails }: { mails: MailLogEntry[] }) {
@@ -286,7 +287,7 @@ function MailHistory({ mails }: { mails: MailLogEntry[] }) {
             return [
               <tr key={m.id}>
                 <td>{fmtStamp(m.at)}</td>
-                <td>{m.kind === 'test' ? '테스트' : MAIL_KIND_LABEL[m.kind]}</td>
+                <td>{m.kind === 'test' ? '테스트' : m.kind === 'reminder' ? '검수자 알림' : MAIL_KIND_LABEL[m.kind]}</td>
                 <td title={m.to}>{m.to}</td>
                 <td title={m.subject}>{m.subject}</td>
                 <td>{m.method === 'smtp' ? '자동' : '수동'}</td>

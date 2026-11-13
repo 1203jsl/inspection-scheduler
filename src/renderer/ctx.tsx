@@ -19,6 +19,10 @@ export interface ListPreset {
   /** 특정 날짜 (달력에서 빈 날짜를 눌렀을 때) */
   day?: string;
   unassigned?: boolean;
+  /** 결과: pass | fail | missing */
+  result?: string;
+  /** 기간 */
+  period?: 'today' | 'week' | 'month' | 'nextMonth';
 }
 
 export interface AppCtx {

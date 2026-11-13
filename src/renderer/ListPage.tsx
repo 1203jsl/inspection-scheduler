@@ -4,6 +4,7 @@ import { addDays, addMonths, fmtMD, monthEnd, monthStart, weekStart } from '../s
 import { assignInspector, cancel, confirm, resultMissing, startNegotiation, statusBadge, WorkflowError } from '../shared/workflow';
 import { conflictMap, conflictsFor, toSlot } from '../shared/conflicts';
 import { Alert, ErrorAlert, Icon } from './components';
+import { api } from './api';
 import { useApp, type ListPreset } from './ctx';
 import { CancelDialog } from './dialogs';
 
@@ -31,12 +32,13 @@ export function ListPage({ preset }: { preset?: ListPreset }) {
   const inspectors = data.inspectors.items;
 
   const [q, setQ] = useState(preset?.q ?? '');
-  const [period, setPeriod] = useState<Period>(preset?.day ? 'day' : '');
+  const [period, setPeriod] = useState<Period>(preset?.day ? 'day' : preset?.period ?? '');
   const [day] = useState(preset?.day ?? '');
   const [vendor, setVendor] = useState(preset?.vendor ?? '');
   const [insp, setInsp] = useState(preset?.unassigned ? '__none' : preset?.inspectorId ?? '');
   const [status, setStatus] = useState<string>(preset?.status ?? '');
-  const [result, setResult] = useState('');
+  const [result, setResult] = useState(preset?.result ?? '');
+  const [exportMsg, setExportMsg] = useState<{ ok: boolean; text: string } | null>(null);
   const [sort, setSort] = useState<{ key: SortKey; dir: 1 | -1 }>({ key: 'date', dir: 1 });
   const [page, setPage] = useState(0);
   const [sel, setSel] = useState<Set<string>>(new Set());
@@ -189,8 +191,19 @@ export function ListPage({ preset }: { preset?: ListPreset }) {
           <option value="missing">미입력</option>
         </select>
         <button className="btn btn-ghost" type="button" onClick={reset}>초기화</button>
+        <div className="sp" />
+        <button className="btn" type="button" disabled={rows.length === 0} onClick={async () => {
+          setExportMsg(null);
+          const sel = (id: string, label: string) => (document.querySelector(`select[aria-label="${id}"]`) as HTMLSelectElement | null)?.selectedOptions[0]?.text ?? label;
+          const filter = [q.trim() && `검색: ${q.trim()}`, period && sel('기간', ''), vendor && `업체: ${vendor}`, insp && sel('검수자', ''), status && sel('상태', ''), result && sel('결과', '')]
+            .filter(Boolean).join(' · ');
+          const r = await api.exportList(rows.map((i) => i.id), filter);
+          if (!r.ok) setExportMsg({ ok: false, text: r.error.message });
+          else if (r.value) setExportMsg({ ok: true, text: `${rows.length}건을 내보냈습니다: ${r.value}` });
+        }}><Icon name="download" />엑셀 내보내기</button>
       </div>
 
+      {exportMsg && <Alert kind={exportMsg.ok ? 'ok' : 'danger'}>{exportMsg.text}</Alert>}
       {bulkMsg && (
         <>
           {bulkMsg.ok && <Alert kind="ok">{bulkMsg.ok}</Alert>}

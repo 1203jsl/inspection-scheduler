@@ -351,7 +351,7 @@ export function InspectorDialog({ inspector, onClose, onSubmit }: {
         <button className="btn btn-primary" type="button" disabled={busy} onClick={() => {
           setTried(true);
           if (Object.keys(errs).length) return;
-          run(() => onSubmit({ ...p, name: p.name.trim(), dept: p.dept.trim(), email: p.email.trim() }));
+          run(() => onSubmit({ ...p, name: p.name.trim(), dept: p.dept.trim(), email: p.email.trim(), account: p.account?.trim() || undefined }));
         }}>저장</button>
       </>}
     >
@@ -362,6 +362,11 @@ export function InspectorDialog({ inspector, onClose, onSubmit }: {
           <FieldErr msg={show('name')} />
         </div>
         <div className="field"><label htmlFor="pd">부서</label><input id="pd" className="input" value={p.dept} onChange={(e) => setP({ ...p, dept: e.target.value })} /></div>
+      </div>
+      <div className="field">
+        <label htmlFor="pa">Windows 계정 (알림 팝업용)</label>
+        <input id="pa" className="input" placeholder="예: kim.mj" value={p.account ?? ''} onChange={(e) => setP({ ...p, account: e.target.value })} />
+        <span className="help">이 계정으로 로그인한 PC에 이 검수자의 다가오는 검수 팝업을 띄웁니다. 비워 두면 PC 사용자 표시 이름이 같을 때 띄웁니다.</span>
       </div>
       <div className="field">
         <label htmlFor="pe">이메일</label>

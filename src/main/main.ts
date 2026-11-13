@@ -12,6 +12,9 @@ import { LockManager } from './core/lock';
 import { readLocalConfig, writeLocalConfig } from './core/localConfig';
 import { MailService } from './core/mailService';
 import { AttachmentService } from './core/attachments';
+import { ReminderService } from './core/reminders';
+import { buildListExport, buildVendorSchedule } from './core/excel/export';
+import { ymd } from '../shared/dates';
 import { SmtpCredentialStore } from './core/secrets';
 
 // 날짜 입력 칸 등을 한국어 형식으로 (영문 Windows 에서도 동일하게)
@@ -27,6 +30,7 @@ let lock: LockManager | null = null;
 let importer: ImportService | null = null;
 let mailer: MailService | null = null;
 let attacher: AttachmentService | null = null;
+let reminders: ReminderService | null = null;
 let lockStaleMinutes = 30;
 let win: BrowserWindow | null = null;
 
@@ -40,6 +44,7 @@ function openStore(dir: string) {
   importer = new ImportService(store, () => ({ account, displayName }));
   mailer = new MailService(store, creds(), () => ({ account, displayName }));
   attacher = new AttachmentService(store, () => ({ account, displayName }));
+  reminders = new ReminderService(store, creds(), () => ({ account, displayName }));
 }
 
 function applySettings(s: Settings) {
@@ -190,6 +195,48 @@ handle('mail:openWebmail', async (url: string) => {
   if (u.protocol !== 'https:' && u.protocol !== 'http:') throw new AppError('UNKNOWN', '웹메일 주소는 http:// 또는 https:// 로 시작해야 합니다.');
   await shell.openExternal(u.toString());
   return true;
+});
+
+// ───────── 검수자 알림 메일 ─────────
+handle('reminder:auto', async () => need(reminders).auto());
+handle('reminder:send', async (drafts: MailDraft[]) => need(reminders).send(drafts));
+
+// ───────── 엑셀 내보내기 ─────────
+async function saveXlsx(title: string, name: string, buf: Buffer): Promise<string | null> {
+  const r = await dialog.showSaveDialog(win!, {
+    title, defaultPath: path.join(app.getPath('downloads'), name), filters: [{ name: 'Excel 통합 문서', extensions: ['xlsx'] }],
+  });
+  if (r.canceled || !r.filePath) return null;
+  try {
+    await fs.writeFile(r.filePath, buf);
+  } catch (e) {
+    const code = (e as NodeJS.ErrnoException).code;
+    throw new AppError('FILE_BUSY', code === 'EBUSY' || code === 'EPERM'
+      ? '같은 이름의 파일이 엑셀에서 열려 있어 저장하지 못했습니다. 파일을 닫거나 다른 이름으로 저장하세요.'
+      : `파일을 저장하지 못했습니다: ${(e as Error).message}`);
+  }
+  return r.filePath;
+}
+async function namesMap() {
+  const p = await need(store).load('inspectors');
+  const m = new Map(p.items.map((x) => [x.id, x.name]));
+  return (id: string | null) => (id ? m.get(id) ?? '' : '');
+}
+handle('export:list', async (ids: string[], filter: string) => {
+  const all = (await need(store).load('inspections')).items;
+  const byId = new Map(all.map((i) => [i.id, i]));
+  const items = ids.map((id) => byId.get(id)).filter((i): i is NonNullable<typeof i> => !!i);
+  const buf = await buildListExport(items, await namesMap(), { by: displayName, at: new Date(), filter });
+  return saveXlsx('목록 엑셀 내보내기', `검수목록_${ymd(new Date())}.xlsx`, buf);
+});
+handle('export:vendor', async (o: { vendor: string; from: string; to: string }) => {
+  if (!o.from || !o.to || o.from > o.to) throw new AppError('UNKNOWN', '기간을 확인하세요. 시작일이 종료일보다 뒤입니다.');
+  const all = (await need(store).load('inspections')).items;
+  const items = all
+    .filter((i) => i.vendorName === o.vendor && i.schedule.date && i.schedule.date >= o.from && i.schedule.date <= o.to)
+    .sort((a, b) => `${a.schedule.date} ${a.schedule.time ?? ''}`.localeCompare(`${b.schedule.date} ${b.schedule.time ?? ''}`));
+  const buf = await buildVendorSchedule(o.vendor, items, await namesMap(), { from: o.from, to: o.to, by: displayName, today: ymd(new Date()) });
+  return saveXlsx('업체별 일정 확인서 저장', `일정확인서_${o.vendor}_${o.from}_${o.to}.xlsx`.replace(/[\\/:*?"<>|]/g, '_'), buf);
 });
 
 // ───────── 첨부파일 ─────────

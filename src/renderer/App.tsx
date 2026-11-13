@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { AppErrorInfo, AppState, DataFiles, Inspection } from '../shared/types';
 import { ymd } from '../shared/dates';
 import { api, fmtTime, type LockStatus } from './api';
@@ -12,7 +12,11 @@ import { ListPage } from './ListPage';
 import { MailPage } from './MailPage';
 import { InspectorsPage, VendorsPage } from './PeoplePages';
 import { SettingsPage } from './SettingsPage';
-import { StatusPage } from './StatusPage';
+import { DashboardPage } from './DashboardPage';
+import { ReminderPopup, ReminderPreview } from './Reminders';
+import { DEFAULT_NOTIFY, matchInspectors, upcoming } from '../shared/reminders';
+import type { MailDraft } from '../shared/types';
+import type { ReminderRun } from './api';
 
 type NavId = 'dashboard' | 'calendar' | 'list' | 'import' | 'vendors' | 'inspectors' | 'settings';
 const NAV: { id: NavId; label: string; icon: IconName }[] = [
@@ -33,10 +37,16 @@ export function App() {
   const [loadError, setLoadError] = useState<AppErrorInfo | null>(null);
   const [conflict, setConflict] = useState<AppErrorInfo | null>(null);
   const [lock, setLock] = useState<LockStatus | null>(null);
-  const [route, setRoute] = useState<Route>({ page: 'list' });
+  const [route, setRoute] = useState<Route>({ page: 'dashboard' });
   const [flash, setFlash] = useState('');
   const [search, setSearch] = useState('');
   const [today, setToday] = useState(ymd(new Date()));
+  // 검수자 알림: 팝업·메일은 하루에 한 번 (프로그램 실행 시, 실행 중 날짜가 바뀔 때)
+  const [popup, setPopup] = useState<{ items: Inspection[]; who: string } | null>(null);
+  const [drafts, setDrafts] = useState<MailDraft[] | null>(null);
+  const [remindMsg, setRemindMsg] = useState<{ ok: boolean; text: string } | null>(null);
+  const popupDay = useRef('');
+  const mailDay = useRef('');
 
   const reload = useCallback(async () => {
     const r = await api.loadAll();
@@ -60,6 +70,45 @@ export function App() {
       }
     });
   }, [reload]);
+
+  const showRun = (r: ReminderRun | null, error?: string) => {
+    if (error) setRemindMsg({ ok: false, text: `검수자 알림 메일을 보내지 못했습니다: ${error}` });
+    else if (r?.status === 'done') {
+      const fail = r.failed.map((f) => `${f.to} (${f.error})`).join(', ');
+      setRemindMsg({ ok: !r.failed.length, text: `검수자 알림 메일 ${r.sent.length}통을 보냈습니다.${fail ? ` 보내지 못한 메일: ${fail}` : ''}` });
+    }
+  };
+
+  // 검수자 알림 (데이터를 처음 읽었을 때와 날짜가 바뀐 뒤)
+  useEffect(() => {
+    if (!data || !state || loadError) return;
+    const notify = data.settings.notify ?? DEFAULT_NOTIFY;
+    if (popupDay.current !== today) {
+      popupDay.current = today;
+      const mine = matchInspectors(state.user, data.inspectors.items);
+      if (notify.popup && mine.length) {
+        const ids = new Set(mine.map((p) => p.id));
+        const list = upcoming(data.inspections.items, today, notify.daysBefore).filter((i) => ids.has(i.schedule.inspectorId ?? ''));
+        if (list.length) setPopup({ items: list, who: mine.map((p) => p.name).join(', ') });
+      }
+    }
+    if (mailDay.current !== today) {
+      mailDay.current = today;
+      api.reminderAuto().then((r) => {
+        if (!r.ok) return showRun(null, r.error.message);
+        if (r.value.status === 'preview') setDrafts(r.value.drafts);
+        else showRun(r.value);
+      });
+    }
+  }, [data, state, loadError, today]);
+
+  // 실행 중 날짜가 바뀌면 새로 불러옴 (그러면 위의 알림이 다시 돎)
+  useEffect(() => {
+    const t = setInterval(() => {
+      if (ymd(new Date()) !== today) reload();
+    }, 5 * 60_000);
+    return () => clearInterval(t);
+  }, [today, reload]);
 
   // 다른 PC의 "편집 중" 표시를 30초마다 확인
   useEffect(() => {
@@ -183,6 +232,12 @@ export function App() {
             </Alert>
           )}
           {flash && !loadError && <Alert kind="ok">{flash}</Alert>}
+          {remindMsg && (
+            <Alert kind={remindMsg.ok ? 'ok' : 'warn'} icon="mail"
+              action={<button className="btn btn-sm btn-ghost" type="button" onClick={() => setRemindMsg(null)}>닫기</button>}>
+              {remindMsg.text}
+            </Alert>
+          )}
           {loadError && (
             <>
               <ErrorAlert error={loadError} onRetry={reload} />
@@ -199,7 +254,7 @@ export function App() {
               {route.page === 'mail' && <MailPage key={`${route.id}:${route.kind ?? ''}`} id={route.id} kind={route.kind} from={route.from} />}
               {route.page === 'vendors' && <VendorsPage initial={route.vendor} />}
               {route.page === 'inspectors' && <InspectorsPage />}
-              {route.page === 'dashboard' && <StatusPage data={ctx.data} step="7단계" label="대시보드" />}
+              {route.page === 'dashboard' && <DashboardPage />}
               {route.page === 'import' && (
                 <ImportPage onImported={() => reload()} onSaveError={handleSaveError} onLockChange={setLock} />
               )}
@@ -219,6 +274,17 @@ export function App() {
           )}
         </div>
       </div>
+      {popup && !conflict && (
+        <ReminderPopup items={popup.items} today={today} who={popup.who} onClose={() => setPopup(null)}
+          onOpen={(i) => {
+            setPopup(null);
+            if (i) go({ page: 'detail', id: i.id, from: { page: 'dashboard' } });
+            else go({ page: 'calendar', date: popup.items[0].schedule.date ?? undefined });
+          }} />
+      )}
+      {drafts && !popup && !conflict && (
+        <ReminderPreview drafts={drafts} onDone={(r, err) => { setDrafts(null); showRun(r, err); reload(); }} />
+      )}
       {conflict && (
         <ConflictDialog
           error={conflict}
