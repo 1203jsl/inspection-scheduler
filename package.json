@@ -13,7 +13,7 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "samples": "vite-node scripts/make-samples.ts",
-    "dist": "npm run build && electron-builder --win --x64"
+    "dist": "npm run build && electron-builder --win --x64 --publish never"
   },
   "devDependencies": {
     "@fontsource/noto-sans-kr": "^5.3.1",
