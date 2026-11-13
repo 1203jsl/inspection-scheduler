@@ -2,7 +2,7 @@ import { app, BrowserWindow, clipboard, dialog, ipcMain, safeStorage, shell } fr
 import { promises as fs } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import type { CurrentUser, DataFiles, MailDraft, Result, Settings } from '../shared/types';
+import type { AttachmentKind, CurrentUser, DataFiles, MailDraft, Result, Settings } from '../shared/types';
 import { DataStore } from './core/dataStore';
 import { buildTemplate } from './core/excel/template';
 import { ImportService } from './core/importService';
@@ -11,6 +11,7 @@ import { AppError, toErrorInfo } from './core/errors';
 import { LockManager } from './core/lock';
 import { readLocalConfig, writeLocalConfig } from './core/localConfig';
 import { MailService } from './core/mailService';
+import { AttachmentService } from './core/attachments';
 import { SmtpCredentialStore } from './core/secrets';
 
 // 날짜 입력 칸 등을 한국어 형식으로 (영문 Windows 에서도 동일하게)
@@ -25,6 +26,7 @@ let store: DataStore | null = null;
 let lock: LockManager | null = null;
 let importer: ImportService | null = null;
 let mailer: MailService | null = null;
+let attacher: AttachmentService | null = null;
 let lockStaleMinutes = 30;
 let win: BrowserWindow | null = null;
 
@@ -37,6 +39,7 @@ function openStore(dir: string) {
   lock = new LockManager(dir, me(), () => lockStaleMinutes);
   importer = new ImportService(store, () => ({ account, displayName }));
   mailer = new MailService(store, creds(), () => ({ account, displayName }));
+  attacher = new AttachmentService(store, () => ({ account, displayName }));
 }
 
 function applySettings(s: Settings) {
@@ -186,6 +189,17 @@ handle('mail:openWebmail', async (url: string) => {
   }
   if (u.protocol !== 'https:' && u.protocol !== 'http:') throw new AppError('UNKNOWN', '웹메일 주소는 http:// 또는 https:// 로 시작해야 합니다.');
   await shell.openExternal(u.toString());
+  return true;
+});
+
+// ───────── 첨부파일 ─────────
+handle('attach:pick', async () => {
+  const r = await dialog.showOpenDialog(win!, { title: '첨부할 파일 선택', properties: ['openFile', 'multiSelections'] });
+  return r.canceled ? [] : r.filePaths;
+});
+handle('attach:add', async (id: string, paths: string[], kind: AttachmentKind) => need(attacher).add(id, paths, kind));
+handle('attach:remove', async (id: string, attachmentId: string) => {
+  await need(attacher).remove(id, attachmentId);
   return true;
 });
 

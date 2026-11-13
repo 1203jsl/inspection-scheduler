@@ -1,5 +1,5 @@
 import type {
-  AppState, BackupEntry, DataFiles, FolderCheck, ImportPreview, ImportSummary, MailDraft, MailLogEntry, Result, SmtpAccountInfo,
+  AppState, Attachment, AttachmentKind, BackupEntry, DataFiles, FolderCheck, ImportPreview, ImportSummary, MailDraft, MailLogEntry, Result, SmtpAccountInfo,
 } from '../shared/types';
 import type { LockStatus } from '../main/core/lock';
 
@@ -29,6 +29,9 @@ export interface Api {
   mailPickAttachments(): Promise<Result<string[]>>;
   mailOpenWebmail(url: string): Promise<Result<boolean>>;
   copyText(text: string): Promise<Result<boolean>>;
+  attachPick(): Promise<Result<string[]>>;
+  attachAdd(id: string, paths: string[], kind: AttachmentKind): Promise<Result<Attachment[]>>;
+  attachRemove(id: string, attachmentId: string): Promise<Result<boolean>>;
   pathForFile(f: File): string;
 }
 

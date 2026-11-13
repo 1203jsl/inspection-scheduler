@@ -28,6 +28,9 @@ const api = {
   mailPickAttachments: call('mail:pickAttachments'),
   mailOpenWebmail: call('mail:openWebmail'),
   copyText: call('clipboard:write'),
+  attachPick: call('attach:pick'),
+  attachAdd: call('attach:add'),
+  attachRemove: call('attach:remove'),
   /** 끌어다 놓은 파일의 실제 경로 */
   pathForFile: (f: File) => webUtils.getPathForFile(f),
 };

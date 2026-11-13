@@ -152,10 +152,26 @@ export interface Inspection extends RequestFields {
   sources: SourceRef[];
   negotiations: NegotiationNote[];
   result: InspectionResult | null;
-  attachments: unknown[];
+  attachments: Attachment[];
   history: HistoryEntry[];
   createdAt: string;
   createdBy: string;
+}
+
+export const ATTACHMENT_KINDS = ['검수자료', '회의록', '성적서', '기타'] as const;
+export type AttachmentKind = (typeof ATTACHMENT_KINDS)[number];
+
+/** 건별 첨부파일 (실제 파일은 데이터 폴더의 첨부/{신청번호}/) */
+export interface Attachment {
+  id: string;
+  kind: AttachmentKind;
+  /** 데이터 폴더 기준 상대 경로 */
+  file: string;
+  /** 사용자가 넣은 원래 파일 이름 */
+  name: string;
+  size: number;
+  addedAt: string;
+  addedBy: string;
 }
 
 export interface Inspector {

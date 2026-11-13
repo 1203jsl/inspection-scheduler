@@ -21,7 +21,7 @@ export interface Actor {
   displayName: string;
 }
 
-export type Action = 'negotiate' | 'confirm' | 'change' | 'cancel' | 'assign' | 'edit' | 'note';
+export type Action = 'negotiate' | 'confirm' | 'change' | 'cancel' | 'assign' | 'edit' | 'note' | 'result';
 
 const ALLOWED: Record<Action, InspectionStatus[]> = {
   negotiate: ['received', 'registered'],
@@ -31,11 +31,13 @@ const ALLOWED: Record<Action, InspectionStatus[]> = {
   assign: ['received', 'registered', 'negotiating', 'confirmed', 'changed'],
   edit: ['received', 'registered', 'negotiating', 'confirmed', 'changed', 'done', 'canceled'],
   note: ['received', 'registered', 'negotiating', 'confirmed', 'changed', 'done', 'canceled'],
+  // 확정된 건에 결과 입력, 검수완료 건은 결과 수정
+  result: ['confirmed', 'changed', 'done'],
 };
 
 const ACTION_LABEL: Record<Action, string> = {
   negotiate: '협의 시작', confirm: '확정', change: '변경', cancel: '취소',
-  assign: '검수자 배정', edit: '기본정보 수정', note: '협의 기록',
+  assign: '검수자 배정', edit: '기본정보 수정', note: '협의 기록', result: '결과 입력',
 };
 
 export function can(insp: Pick<Inspection, 'status'>, action: Action): boolean {
@@ -55,6 +57,8 @@ export const FIELD_LABEL: Record<string, string> = {
   contactName: '업체 담당자', contactPhone: '연락처', contactEmail: '이메일', note: '비고',
   'schedule.date': '검수일', 'schedule.time': '검수 시간', 'schedule.location': '검수 장소',
   'schedule.inspectorId': '검수자', status: '상태', conflict: '충돌 강제 진행',
+  'result.verdict': '검수 결과', 'result.date': '실제 검수일', 'result.inspectorId': '검수자(결과)',
+  'result.failReason': '불합격 사유', 'result.memo': '결과 메모', attachments: '첨부파일',
 };
 
 function clone(i: Inspection): Inspection {
@@ -211,6 +215,61 @@ export function addNote(insp: Inspection, text: string, actor: Actor, now: Date)
   return i;
 }
 
+// ───────── 검수 결과 ─────────
+
+export interface ResultInput {
+  verdict: 'pass' | 'fail' | null;
+  date: string | null;
+  inspectorId: string | null;
+  failReason: string;
+  memo: string;
+}
+
+export type ResultErrors = Partial<Record<keyof ResultInput, string>>;
+
+export function checkResult(r: ResultInput, inspectors: Inspector[], today: string): { errors: ResultErrors; warnings: string[] } {
+  const errors: ResultErrors = {};
+  const warnings: string[] = [];
+  if (!r.verdict) errors.verdict = '합격 또는 불합격을 고르세요.';
+  if (!r.date || !/^\d{4}-\d{2}-\d{2}$/.test(r.date)) errors.date = '실제 검수일을 입력하세요.';
+  else if (r.date > today) warnings.push(`실제 검수일(${r.date})이 오늘보다 뒤입니다. 날짜를 확인하세요.`);
+  if (!r.inspectorId) errors.inspectorId = '검수자를 고르세요.';
+  else if (!inspectors.some((p) => p.id === r.inspectorId)) errors.inspectorId = '검수자 목록에 없는 사람입니다. 다시 고르세요.';
+  if (r.verdict === 'fail' && !r.failReason.trim()) errors.failReason = '불합격 사유를 입력하세요. 업체 통보 메일에 들어갑니다.';
+  return { errors, warnings };
+}
+
+/**
+ * 결과 입력(또는 수정). 상태를 '검수완료'로 바꾸고 바뀐 항목을 이력에 남깁니다.
+ */
+export function recordResult(insp: Inspection, r: ResultInput, inspectors: Inspector[], actor: Actor, now: Date, today: string): Inspection {
+  ensure(insp, 'result');
+  const { errors } = checkResult(r, inspectors, today);
+  const msgs = Object.values(errors);
+  if (msgs.length) throw new WorkflowError(`${insp.id}: ${msgs.join(' ')}`);
+  const i = clone(insp);
+  const prev = insp.result;
+  const next = {
+    verdict: r.verdict!, date: r.date!, inspectorId: r.inspectorId, failReason: r.verdict === 'fail' ? r.failReason.trim() : '',
+    memo: r.memo.trim(), at: now.toISOString(), by: actor.displayName,
+  };
+  const label = (v: string | undefined) => (v === 'pass' ? '합격' : v === 'fail' ? '불합격' : undefined);
+  const fields: [keyof typeof next, unknown, unknown][] = [
+    ['verdict', label(prev?.verdict) ?? null, label(next.verdict)],
+    ['date', prev?.date ?? null, next.date],
+    ['inspectorId', prev?.inspectorId ?? null, next.inspectorId],
+    ['failReason', prev?.failReason || null, next.failReason || null],
+    ['memo', prev?.memo || null, next.memo || null],
+  ];
+  for (const [k, a, b] of fields) {
+    if ((a ?? '') === (b ?? '')) continue;
+    i.history.push(entry(actor, now, { action: 'field', field: `result.${k}`, from: a, to: b, reason: prev ? '결과 수정' : undefined }));
+  }
+  i.result = next;
+  setStatus(i, 'done', actor, now, label(next.verdict));
+  return i;
+}
+
 // ───────── 표시 ─────────
 
 export type BadgeClass = 'st-received' | 'st-negotiating' | 'st-confirmed' | 'st-changed' | 'st-canceled' | 'st-pass' | 'st-fail';
@@ -236,9 +295,10 @@ export function resultMissing(i: Inspection, today: string): boolean {
   return (i.status === 'confirmed' || i.status === 'changed') && !!i.schedule.date && i.schedule.date < today && !i.result;
 }
 
-/** 다음에 할 일 (상세 화면의 강조 버튼) */
-export function nextAction(i: Inspection): Action | null {
+/** 다음에 할 일 (상세 화면의 강조 버튼). 확정된 건은 검수일이 되면 결과 입력 */
+export function nextAction(i: Inspection, today?: string): Action | null {
   if (i.status === 'received' || i.status === 'registered') return 'negotiate';
   if (i.status === 'negotiating' || i.status === 'changed') return 'confirm';
+  if (i.status === 'confirmed' && today && i.schedule.date && i.schedule.date <= today) return 'result';
   return null;
 }

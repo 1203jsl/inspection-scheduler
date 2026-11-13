@@ -84,7 +84,7 @@ export function MailPage({ id, kind: initialKind, from }: { id: string; kind?: M
   };
 
   const manual = settings.mail.method === 'manual';
-  const candidates = [...new Set(items.flatMap((i) => i.sources.map((s) => s.file)))];
+  const candidates = [...new Set(items.flatMap((i) => [...(i.attachments ?? []).map((a) => a.file), ...i.sources.map((s) => s.file)]))];
   const attachList = [...candidates.map((p) => ({ path: p, local: false })), ...extra.map((e) => ({ path: e.path, local: true }))];
   const draft = (): MailDraft => ({
     inspectionId: items[0].id,

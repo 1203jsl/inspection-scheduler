@@ -11,6 +11,7 @@ import { Alert, ErrorAlert, Icon } from './components';
 import { useApp, type Route } from './ctx';
 import { CancelDialog, EditInfoDialog, ScheduleDialog } from './dialogs';
 import { StatusBadge } from './ListPage';
+import { FilesPanel, ResultPanel } from './DetailTabs';
 
 type Tab = 'info' | 'nego' | 'result' | 'files' | 'mail' | 'history';
 type Dlg = null | 'confirm' | 'change' | 'cancel' | 'edit';
@@ -52,7 +53,7 @@ export function DetailPage({ id, from }: { id: string; from?: Route }) {
   const mails = data.mail_log.items.filter((m) => mailCovers(m, insp.id));
   const pending = pendingMail(insp, data.mail_log.items);
   // 보낼 안내 메일이 남아 있으면 [메일 보내기]가 다음 할 일
-  const primary = pending ? null : nextAction(insp);
+  const primary = pending ? null : nextAction(insp, today);
   const here: Route = { page: 'detail', id: insp.id, from };
   const btn = (key: 'negotiate' | 'confirm' | 'change', label: string, onClick: () => void) =>
     can(insp, key) && (
@@ -63,7 +64,7 @@ export function DetailPage({ id, from }: { id: string; from?: Route }) {
     { id: 'info', label: '기본정보' },
     { id: 'nego', label: `일정 협의${insp.negotiations.length ? ` (${insp.negotiations.length})` : ''}` },
     { id: 'result', label: '검수 결과' },
-    { id: 'files', label: `첨부파일${insp.sources.length ? ` (${insp.sources.length})` : ''}` },
+    { id: 'files', label: `첨부파일${(insp.attachments ?? []).length ? ` (${insp.attachments.length})` : ''}` },
     { id: 'mail', label: `메일 이력${mails.length ? ` (${mails.length})` : ''}` },
     { id: 'history', label: `변경 이력 (${insp.history.length})` },
   ];
@@ -86,6 +87,11 @@ export function DetailPage({ id, from }: { id: string; from?: Route }) {
             {btn('negotiate', '협의 시작', () => act(() => startNegotiation(insp, actor, new Date()), `${insp.id}: 일정협의중으로 바꿨습니다.`))}
             {btn('confirm', insp.status === 'changed' ? '재확정' : '확정', () => setDlg('confirm'))}
             {btn('change', '변경', () => setDlg('change'))}
+            {can(insp, 'result') && (
+              <button className={`btn${primary === 'result' ? ' btn-primary' : ''}`} type="button" onClick={() => setTab('result')}>
+                {insp.result ? '결과 수정' : '결과 입력'}
+              </button>
+            )}
             {can(insp, 'cancel') && <button className="btn btn-danger" type="button" onClick={() => setDlg('cancel')}>취소</button>}
             <button className={`btn${pending ? ' btn-primary' : ''}`} type="button" onClick={() => go({ page: 'mail', id: insp.id, from: here })}>
               <Icon name="mail" />메일 보내기
@@ -94,7 +100,11 @@ export function DetailPage({ id, from }: { id: string; from?: Route }) {
         </div>
         {pending && <Alert kind="info"><b>안내</b> · {MAIL_KIND_LABEL[pending]} 안내 메일이 아직 발송되지 않았습니다.</Alert>}
         {insp.status === 'changed' && <Alert kind="info">일정이 변경되었습니다. 업체와 다시 맞춘 뒤 [재확정]하세요.</Alert>}
-        {resultMissing(insp, today) && <Alert kind="danger">검수일({fmtYMD(insp.schedule.date)})이 지났는데 결과가 없습니다. 결과 입력은 6단계에서 만듭니다.</Alert>}
+        {resultMissing(insp, today) && tab !== 'result' && (
+          <Alert kind="danger" action={<button className="btn btn-sm" type="button" onClick={() => setTab('result')}>결과 입력</button>}>
+            검수일({fmtYMD(insp.schedule.date)})이 지났는데 결과가 없습니다.
+          </Alert>
+        )}
         {error && <ErrorAlert error={error} />}
       </div>
 
@@ -142,21 +152,14 @@ export function DetailPage({ id, from }: { id: string; from?: Route }) {
           </div>
         )}
 
-        {tab === 'result' && <Alert kind="info">검수 결과(합격/불합격) 입력과 통보는 6단계에서 만듭니다.</Alert>}
-
-        {tab === 'files' && (
-          <div className="card" style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-            <div className="card-h" style={{ margin: 0 }}><Icon name="file" />업체 원본 엑셀</div>
-            {insp.sources.map((s, k) => (
-              <div key={k} className="list-i">
-                <Icon name="file" />
-                <a className="link" href="#" onClick={(e) => { e.preventDefault(); api.openDataFile(s.file); }}>{s.file.split('/').pop()}</a>
-                <span className="muted">{s.row}행 · {s.importedBy} · {fmtStamp(s.importedAt)}</span>
-              </div>
-            ))}
-            <Alert kind="info">회의록·검수자료 첨부는 6단계에서 만듭니다.</Alert>
+        {tab === 'result' && (
+          <div className="split" style={{ gridTemplateColumns: 'minmax(0, 1fr) 520px' }}>
+            <ResultPanel key={insp.result?.at ?? 'new'} insp={insp} here={here} />
+            <FilesPanel insp={insp} compact />
           </div>
         )}
+
+        {tab === 'files' && <FilesPanel insp={insp} />}
 
         {tab === 'mail' && <MailHistory mails={mails} />}
 
@@ -235,11 +238,12 @@ function HistoryTable({ insp, inspectorName }: { insp: Inspection; inspectorName
   const show = (h: HistoryEntry, v: unknown) => {
     if (v === null || v === undefined || v === '') return '—';
     if (h.field === 'status' || h.action === 'status') return STATUS_LABEL[v as InspectionStatus] ?? String(v);
-    if (h.field === 'schedule.inspectorId') return inspectorName(String(v));
+    if (h.field === 'schedule.inspectorId' || h.field === 'result.inspectorId') return inspectorName(String(v));
     return String(v);
   };
   const what = (h: HistoryEntry) =>
-    h.action === 'created' ? '등록' : h.action === 'status' ? '상태' : FIELD_LABEL[h.field ?? ''] ?? h.field ?? h.action;
+    h.action === 'created' ? '등록' : h.action === 'status' ? '상태' : h.action === 'attach' ? '첨부 추가' : h.action === 'detach' ? '첨부 삭제'
+      : FIELD_LABEL[h.field ?? ''] ?? h.field ?? h.action;
   const list = [...insp.history].reverse();
   return (
     <div className="tbl-wrap" style={{ overflow: 'auto' }}>
