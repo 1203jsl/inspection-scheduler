@@ -171,6 +171,7 @@ export function App() {
     return (
       <FirstRun
         user={state.user}
+        version={state.version}
         initialPath={state.dataDir}
         onCancel={state.dataDir ? () => setChangingFolder(false) : undefined}
         onDone={(s) => {
@@ -205,7 +206,7 @@ export function App() {
           ))}
         </nav>
         <div className="sp" />
-        <div className="help" style={{ color: 'var(--on-sidebar-muted)' }}>PC 사용자: {state.user.displayName}</div>
+        <div className="help" style={{ color: 'var(--on-sidebar-muted)' }}>PC 사용자: {state.user.displayName}{state.version ? ` · v${state.version}` : ''}</div>
       </aside>
       <div className="main">
         <header className="top">

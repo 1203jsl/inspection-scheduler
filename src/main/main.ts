@@ -71,7 +71,7 @@ function handle<A extends unknown[], T>(ch: string, fn: (...a: A) => Promise<T>)
 }
 
 // ───────── IPC ─────────
-handle('app:getState', async () => ({ dataDir, user: me() }));
+handle('app:getState', async () => ({ dataDir, user: me(), version: app.getVersion() }));
 
 handle('folder:pick', async () => {
   const r = await dialog.showOpenDialog(win!, {
@@ -102,7 +102,7 @@ handle('folder:setup', async (opts: { path: string; mode: 'existing' | 'new'; di
     applySettings(saved.settings!);
   } else applySettings(s);
   await writeLocalConfig(localDir(), { dataDir: opts.path });
-  return { dataDir, user: me() };
+  return { dataDir, user: me(), version: app.getVersion() };
 });
 
 handle('data:loadAll', async () => {

@@ -465,4 +465,6 @@ export interface FolderCheck {
 export interface AppState {
   dataDir: string | null;
   user: CurrentUser;
+  /** 프로그램 버전 (예: 1.0.1) */
+  version?: string;
 }

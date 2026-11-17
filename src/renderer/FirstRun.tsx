@@ -4,8 +4,9 @@ import { api, fmtDateTime } from './api';
 import { Alert, ErrorAlert, Icon } from './components';
 
 /** 첫 실행(또는 데이터 폴더 변경) — 디자인 A */
-export function FirstRun({ user, initialPath, notice, onDone, onCancel }: {
+export function FirstRun({ user, version, initialPath, notice, onDone, onCancel }: {
   user: CurrentUser;
+  version?: string;
   initialPath?: string | null;
   notice?: AppErrorInfo | null;
   onDone: (s: AppState) => void;
@@ -53,7 +54,7 @@ export function FirstRun({ user, initialPath, notice, onDone, onCancel }: {
       <div className="card" style={{ width: 640, padding: 0, display: 'flex', flexDirection: 'column' }}>
         <div style={{ padding: '24px 28px 16px', display: 'flex', flexDirection: 'column', gap: 4, borderBottom: '1px solid var(--border)' }}>
           <div style={{ fontSize: 13, lineHeight: '18px', color: 'var(--ink-muted)', fontWeight: 500 }}>
-            검수일정 관리 · {onCancel ? '데이터 폴더 변경' : '처음 실행'}
+            검수일정 관리{version ? ` v${version}` : ''} · {onCancel ? '데이터 폴더 변경' : '처음 실행'}
           </div>
           <h1 style={{ margin: 0, fontSize: 22, lineHeight: '30px', fontWeight: 700 }}>데이터 폴더를 선택하세요</h1>
           <p className="help" style={{ margin: 0, fontSize: 14, lineHeight: '22px' }}>

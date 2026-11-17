@@ -1,7 +1,7 @@
 {
   "name": "inspection-scheduler",
   "productName": "검수일정 관리",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "외주업체 검수일정 관리 (Windows)",
   "main": "dist/main/main.js",
   "private": true,
