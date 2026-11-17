@@ -9,7 +9,19 @@ import { useApp, type ListPreset } from './ctx';
 import { CancelDialog } from './dialogs';
 
 type SortKey = 'id' | 'vendorName' | 'projectName' | 'category' | 'itemName' | 'quantity' | 'date' | 'time' | 'location' | 'inspector' | 'status' | 'result';
-type Period = '' | 'today' | 'week' | 'month' | 'nextMonth' | 'day';
+type QuickPeriod = 'today' | 'week' | 'month' | 'nextMonth';
+const QUICK: { v: QuickPeriod; label: string }[] = [
+  { v: 'today', label: '오늘' }, { v: 'week', label: '이번 주' }, { v: 'month', label: '이번 달' }, { v: 'nextMonth', label: '다음 달' },
+];
+/** 빠른 선택 → 시작일·종료일 */
+function quickRange(p: QuickPeriod, today: string): [string, string] {
+  switch (p) {
+    case 'today': return [today, today];
+    case 'week': { const s = weekStart(today); return [s, addDays(s, 6)]; }
+    case 'month': return [monthStart(today), monthEnd(today)];
+    case 'nextMonth': { const s = addMonths(today, 1); return [s, monthEnd(s)]; }
+  }
+}
 
 const STATUS_OPTIONS: { v: InspectionStatus; label: string }[] = [
   { v: 'registered', label: '등록' },
@@ -32,8 +44,9 @@ export function ListPage({ preset }: { preset?: ListPreset }) {
   const inspectors = data.inspectors.items;
 
   const [q, setQ] = useState(preset?.q ?? '');
-  const [period, setPeriod] = useState<Period>(preset?.day ? 'day' : preset?.period ?? '');
-  const [day] = useState(preset?.day ?? '');
+  const init: [string, string] = preset?.day ? [preset.day, preset.day] : preset?.period ? quickRange(preset.period, today) : ['', ''];
+  const [from, setFrom] = useState(init[0]);
+  const [to, setTo] = useState(init[1]);
   const [vendor, setVendor] = useState(preset?.vendor ?? '');
   const [project, setProject] = useState(preset?.project ?? '');
   const [category, setCategory] = useState(preset?.category ?? '');
@@ -50,16 +63,14 @@ export function ListPage({ preset }: { preset?: ListPreset }) {
   const [bulkErr, setBulkErr] = useState<AppErrorInfo | null>(null);
   const [cancelOpen, setCancelOpen] = useState(false);
 
+  // 기간: 시작일·종료일 중 하나만 있어도 됨. 거꾸로 넣으면 바꿔서 적용
   const range = useMemo((): [string, string] | null => {
-    switch (period) {
-      case 'today': return [today, today];
-      case 'week': { const s = weekStart(today); return [s, addDays(s, 6)]; }
-      case 'month': return [monthStart(today), monthEnd(today)];
-      case 'nextMonth': { const s = addMonths(today, 1); return [s, monthEnd(s)]; }
-      case 'day': return day ? [day, day] : null;
-      default: return null;
-    }
-  }, [period, today, day]);
+    if (!from && !to) return null;
+    const a = from || '0000-00-00', b = to || '9999-12-31';
+    return a <= b ? [a, b] : [b, a];
+  }, [from, to]);
+  const period = !from && !to ? '' : QUICK.find((x) => { const [a, b] = quickRange(x.v, today); return a === from && b === to; })?.v ?? 'custom';
+  const periodText = range ? `${from ? range[0].replace(/-/g, '.') : ''} ~ ${to ? range[1].replace(/-/g, '.') : ''}` : '';
 
   const vendors = useMemo(() => [...new Set(items.map((i) => i.vendorName).filter(Boolean))].sort(), [items]);
   const projects = useMemo(() => [...new Set(items.map((i) => i.projectName).filter(Boolean))].sort((a, b) => a.localeCompare(b, 'ko')), [items]);
@@ -109,7 +120,7 @@ export function ListPage({ preset }: { preset?: ListPreset }) {
   const selected = items.filter((i) => sel.has(i.id));
 
   const reset = () => {
-    setQ(''); setPeriod(''); setVendor(''); setProject(''); setCategory(''); setInsp(''); setStatus(''); setResult(''); setPage(0);
+    setQ(''); setFrom(''); setTo(''); setVendor(''); setProject(''); setCategory(''); setInsp(''); setStatus(''); setResult(''); setPage(0);
   };
   const sortBy = (key: SortKey) => setSort((s) => ({ key, dir: s.key === key ? (s.dir === 1 ? -1 : 1) : 1 }));
   const Th = ({ k, children, num }: { k: SortKey; children: string; num?: boolean }) => (
@@ -169,15 +180,34 @@ export function ListPage({ preset }: { preset?: ListPreset }) {
   return (
     <>
       <div className="toolbar">
-        <input className="input" style={{ width: 200 }} placeholder="목록 안에서 검색" aria-label="목록 안에서 검색" value={q} onChange={(e) => { setQ(e.target.value); setPage(0); }} />
-        <select className="sel" style={{ width: 128 }} aria-label="기간" value={period} onChange={(e) => { setPeriod(e.target.value as Period); setPage(0); }}>
-          <option value="">기간: 전체</option>
-          <option value="today">오늘</option>
-          <option value="week">이번 주</option>
-          <option value="month">이번 달</option>
-          <option value="nextMonth">다음 달</option>
-          {day && <option value="day">{fmtMD(day)}</option>}
+        <input className="input" style={{ width: 220 }} placeholder="목록 안에서 검색" aria-label="목록 안에서 검색" value={q} onChange={(e) => { setQ(e.target.value); setPage(0); }} />
+        <span className="lbl muted" style={{ marginLeft: 8 }}>검수일</span>
+        <select className="sel" style={{ width: 120 }} aria-label="기간" value={period} onChange={(e) => {
+          const v = e.target.value;
+          if (!v) { setFrom(''); setTo(''); } else if (v !== 'custom') { const [a, b] = quickRange(v as QuickPeriod, today); setFrom(a); setTo(b); }
+          setPage(0);
+        }}>
+          <option value="">전체 기간</option>
+          {QUICK.map((x) => <option key={x.v} value={x.v}>{x.label}</option>)}
+          <option value="custom" disabled={period !== 'custom'}>직접 선택</option>
         </select>
+        <input className="input" type="date" style={{ width: 150 }} aria-label="시작일" value={from} max={to || undefined}
+          onChange={(e) => { setFrom(e.target.value); setPage(0); }} />
+        <span className="muted">~</span>
+        <input className="input" type="date" style={{ width: 150 }} aria-label="종료일" value={to} min={from || undefined}
+          onChange={(e) => { setTo(e.target.value); setPage(0); }} />
+        <div className="sp" />
+        <button className="btn" type="button" disabled={rows.length === 0} onClick={async () => {
+          setExportMsg(null);
+          const sel = (id: string, label: string) => (document.querySelector(`select[aria-label="${id}"]`) as HTMLSelectElement | null)?.selectedOptions[0]?.text ?? label;
+          const filter = [q.trim() && `검색: ${q.trim()}`, periodText && `검수일: ${periodText}`, vendor && `업체: ${vendor}`, project && `프로젝트: ${project === '__none' ? '(없음)' : project}`, category && `검수 품목: ${category}`, insp && sel('검수자', ''), status && sel('상태', ''), result && sel('결과', '')]
+            .filter(Boolean).join(' · ');
+          const r = await api.exportList(rows.map((i) => i.id), filter);
+          if (!r.ok) setExportMsg({ ok: false, text: r.error.message });
+          else if (r.value) setExportMsg({ ok: true, text: `${rows.length}건을 내보냈습니다: ${r.value}` });
+        }}><Icon name="download" />엑셀 내보내기</button>
+      </div>
+      <div className="toolbar">
         <select className="sel" style={{ width: 128 }} aria-label="업체" value={vendor} onChange={(e) => { setVendor(e.target.value); setPage(0); }}>
           <option value="">업체: 전체</option>
           {vendors.map((v) => <option key={v}>{v}</option>)}
@@ -206,17 +236,7 @@ export function ListPage({ preset }: { preset?: ListPreset }) {
           <option value="fail">불합격</option>
           <option value="missing">미입력</option>
         </select>
-        <button className="btn btn-ghost" type="button" onClick={reset}>초기화</button>
-        <div className="sp" />
-        <button className="btn" type="button" disabled={rows.length === 0} onClick={async () => {
-          setExportMsg(null);
-          const sel = (id: string, label: string) => (document.querySelector(`select[aria-label="${id}"]`) as HTMLSelectElement | null)?.selectedOptions[0]?.text ?? label;
-          const filter = [q.trim() && `검색: ${q.trim()}`, period && sel('기간', ''), vendor && `업체: ${vendor}`, project && `프로젝트: ${project === '__none' ? '(없음)' : project}`, category && `검수 품목: ${category}`, insp && sel('검수자', ''), status && sel('상태', ''), result && sel('결과', '')]
-            .filter(Boolean).join(' · ');
-          const r = await api.exportList(rows.map((i) => i.id), filter);
-          if (!r.ok) setExportMsg({ ok: false, text: r.error.message });
-          else if (r.value) setExportMsg({ ok: true, text: `${rows.length}건을 내보냈습니다: ${r.value}` });
-        }}><Icon name="download" />엑셀 내보내기</button>
+        <button className="btn btn-ghost" type="button" onClick={reset}>필터 초기화</button>
       </div>
 
       {exportMsg && <Alert kind={exportMsg.ok ? 'ok' : 'danger'}>{exportMsg.text}</Alert>}
