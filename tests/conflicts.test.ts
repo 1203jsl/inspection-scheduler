@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import type { ConflictRules, Inspection, Inspector, PreviewRow } from '../src/shared/types';
-import { conflictMap, conflictsFor, DEFAULT_CONFLICT_RULES, type Slot } from '../src/shared/conflicts';
+import { conflictMap, conflictsFor, DEFAULT_CONFLICT_RULES, visitCount, type Slot } from '../src/shared/conflicts';
 import { checkForce, confirm, change } from '../src/shared/workflow';
 import { importConflicts } from '../src/main/core/importConflicts';
 import { defaultSettings, migrate } from '../src/main/core/schema';
@@ -24,9 +24,9 @@ const msgs = (cs: { message: string }[]) => cs.map((c) => c.message);
 describe('충돌 규칙별 검사', () => {
   it('하루 최대 검수 건수: 넘으면 그날 모든 건이 걸림, 취소 건은 세지 않음', () => {
     const r = only('maxPerDay', { enabled: true, value: 3 });
-    const day = [slot({ time: '09:00' }), slot({ time: '11:00' }), slot({ time: '13:00' }), slot({ time: '15:00', status: 'canceled' })];
+    const day = [slot({ time: '09:00', location: 'A' }), slot({ time: '11:00', location: 'B' }), slot({ time: '13:00', location: 'C' }), slot({ time: '15:00', location: 'D', status: 'canceled' })];
     expect(conflictMap(day, r, nameOf).size).toBe(0);
-    const t = slot({ time: '16:00' });
+    const t = slot({ time: '16:00', location: 'E' });
     expect(msgs(conflictsFor(t, day, r, nameOf))).toEqual(['하루 최대 검수 건수(3건) 초과 — 11-10(화) 4건']);
     expect(conflictsFor({ ...t, date: '2026-11-11' }, day, r, nameOf)).toEqual([]);
   });
@@ -39,8 +39,8 @@ describe('충돌 규칙별 검사', () => {
 
   it('검수자 1인당 하루 최대 건수', () => {
     const r = only('maxPerInspector', { enabled: true, value: 2 });
-    const day = [slot({ inspectorId: 'p1' }), slot({ inspectorId: 'p1', time: '13:00' }), slot({ inspectorId: 'p2' })];
-    expect(msgs(conflictsFor(slot({ inspectorId: 'p1', time: '15:00' }), day, r, nameOf))).toEqual(['검수자 1인당 하루 최대 2건 초과 — 김민준 11-10(화) 3건']);
+    const day = [slot({ inspectorId: 'p1', location: 'A' }), slot({ inspectorId: 'p1', time: '13:00', location: 'B' }), slot({ inspectorId: 'p2' })];
+    expect(msgs(conflictsFor(slot({ inspectorId: 'p1', time: '15:00', location: 'C' }), day, r, nameOf))).toEqual(['검수자 1인당 하루 최대 2건 초과 — 김민준 11-10(화) 3건']);
     expect(conflictsFor(slot({ inspectorId: 'p2', time: '15:00' }), day, r, nameOf)).toEqual([]);
     expect(conflictsFor(slot({ inspectorId: null, time: '15:00' }), day, r, nameOf)).toEqual([]); // 미배정은 대상 아님
   });
@@ -68,8 +68,8 @@ describe('충돌 규칙별 검사', () => {
 
   it('같은 업체 하루 최대 건수', () => {
     const r = only('maxPerVendor', { enabled: true, value: 2 });
-    const day = [slot({}), slot({ time: '13:00' }), slot({ vendorName: '대양산업' })];
-    expect(msgs(conflictsFor(slot({ time: '15:00' }), day, r, nameOf))).toEqual(['같은 업체 하루 최대 2건 초과 — 한솔정밀 11-10(화) 3건']);
+    const day = [slot({ location: 'A' }), slot({ time: '13:00', location: 'B' }), slot({ vendorName: '대양산업' })];
+    expect(msgs(conflictsFor(slot({ time: '15:00', location: 'C' }), day, r, nameOf))).toEqual(['같은 업체 하루 최대 2건 초과 — 한솔정밀 11-10(화) 3건']);
     expect(conflictsFor(slot({ vendorName: '대양산업', time: '15:00' }), day, r, nameOf)).toEqual([]);
   });
 
@@ -82,9 +82,31 @@ describe('충돌 규칙별 검사', () => {
 
   it('미확정 건(신청접수·등록·일정협의중·변경됨)도 충돌 검사에 포함, 취소만 빠짐', () => {
     const r = only('maxPerDay', { enabled: true, value: 3 });
-    const day = (['received', 'registered', 'negotiating'] as const).map((st, k) => slot({ status: st, time: `${9 + k}:00`.padStart(5, '0') }));
-    expect(msgs(conflictsFor(slot({ status: 'changed', time: '15:00' }), day, r, nameOf))).toEqual(['하루 최대 검수 건수(3건) 초과 — 11-10(화) 4건']);
-    expect(conflictsFor(slot({ time: '15:00' }), [...day.slice(0, 2), { ...day[2], status: 'canceled' }], r, nameOf)).toEqual([]);
+    const day = (['received', 'registered', 'negotiating'] as const).map((st, k) => slot({ status: st, time: `${9 + k}:00`.padStart(5, '0'), location: `L${k}` }));
+    expect(msgs(conflictsFor(slot({ status: 'changed', time: '15:00', location: 'L9' }), day, r, nameOf))).toEqual(['하루 최대 검수 건수(3건) 초과 — 11-10(화) 4건']);
+    expect(conflictsFor(slot({ time: '15:00', location: 'L9' }), [...day.slice(0, 2), { ...day[2], status: 'canceled' }], r, nameOf)).toEqual([]);
+  });
+
+  it('같은 업체·같은 장소는 품목이 여러 개여도 1건(한 번 방문)으로 센다', () => {
+    const r = only('maxPerDay', { enabled: true, value: 3 });
+    // 한솔정밀 A 3품목(+대상 1) + 대양산업 B 1품목 = 방문 2건 → 충돌 아님
+    const day = [1, 2, 3].map((k) => slot({ location: 'A', time: `1${k}:00` })).concat(slot({ vendorName: '대양산업', location: 'B' }));
+    expect(conflictsFor(slot({ location: 'A', time: '14:00' }), day, r, nameOf)).toEqual([]);
+    // 방문이 4건이 되면 충돌, 문구에 품목 수도 표시
+    const more = day.concat(slot({ vendorName: '서원테크', location: 'C' }));
+    expect(msgs(conflictsFor(slot({ vendorName: '우진전장', location: 'D' }), more, r, nameOf))).toEqual(['하루 최대 검수 건수(3건) 초과 — 11-10(화) 4건(품목 6개)']);
+    // 같은 업체라도 장소가 다르면 다른 방문
+    const v = only('maxPerVendor', { enabled: true, value: 2 });
+    expect(conflictsFor(slot({ location: 'A' }), [slot({ location: 'A' }), slot({ location: 'A' }), slot({ location: 'B' })], v, nameOf)).toEqual([]);
+    expect(msgs(conflictsFor(slot({ location: 'C' }), [slot({ location: 'A' }), slot({ location: 'A' }), slot({ location: 'B' })], v, nameOf)))
+      .toEqual(['같은 업체 하루 최대 2건 초과 — 한솔정밀 11-10(화) 3건(품목 4개)']);
+    // 검수자도 같은 방문은 1건
+    const p = only('maxPerInspector', { enabled: true, value: 2 });
+    expect(conflictsFor(slot({ inspectorId: 'p1', location: 'A' }), [slot({ inspectorId: 'p1', location: 'A' }), slot({ inspectorId: 'p1', location: 'A' }), slot({ inspectorId: 'p1', location: 'B' })], p, nameOf)).toEqual([]);
+  });
+
+  it('업체명이 비어 있으면 건마다 따로 센다', () => {
+    expect(visitCount([slot({ vendorName: '' }), slot({ vendorName: '' })])).toBe(2);
   });
 
   it('검수 불가일', () => {
@@ -100,9 +122,11 @@ describe('충돌 규칙별 검사', () => {
   });
 
   it('여러 규칙이 함께 걸리면 모두 알려준다', () => {
-    const day = [slot({ inspectorId: 'p1', time: '09:00' }), slot({ inspectorId: 'p1', time: '13:00' }), slot({ time: '15:00' })];
-    const day2 = [...day.slice(0, 2), slot({ time: '13:10', vendorName: '대양산업' })];
-    const cs = conflictsFor(slot({ inspectorId: 'p1', time: '13:20' }), day2.concat(day.slice(2)), rules(), nameOf);
+    const day = [
+      slot({ inspectorId: 'p1', time: '09:00', location: 'X1' }), slot({ inspectorId: 'p1', time: '13:00', location: 'X2' }),
+      slot({ time: '15:00', location: 'X3' }), slot({ time: '13:10', vendorName: '대양산업', location: 'X5' }),
+    ];
+    const cs = conflictsFor(slot({ inspectorId: 'p1', time: '13:20', location: 'X5' }), day, rules(), nameOf);
     expect(cs.map((c) => c.rule).sort()).toEqual(['maxPerDay', 'maxPerInspector', 'maxPerVendor', 'sameSlot']);
   });
 });
@@ -148,11 +172,12 @@ describe('가져오기 충돌 경고', () => {
   it('검수 신청 내역에서 같은 업체·같은 장소·같은 시간대 여러 행은 충돌 경고 없음', () => {
     const m = importConflicts([row(3), row(4, { requestedTime: '17:00' })], [], settings, []);
     expect(m.size).toBe(0);
-    // 3행이면 '같은 업체 하루 최대 2건'에는 걸리지만 시간대·장소 중복 경고는 없음
+    // 3행이어도 같은 업체·같은 장소는 한 번 방문이라 '같은 업체 하루 최대 2건'에도 걸리지 않음
     const m3 = importConflicts([row(3), row(4, { requestedTime: '17:00' }), row(5, { requestedTime: '17:15' })], [], settings, []);
-    const all = [...m3.values()].flatMap((v) => v.requestedDate ?? []).map((i) => i.message);
-    expect(all.some((x) => x.includes('같은 시간대·같은 장소'))).toBe(false);
-    expect(all.some((x) => x.includes('같은 업체 하루 최대 2건 초과'))).toBe(true);
+    expect(m3.size).toBe(0);
+    // 같은 업체가 세 곳에 나눠 오면 3번 방문 → 경고
+    const m4 = importConflicts([row(3, { location: 'B' }), row(4, { location: 'C' }), row(5, { location: 'D' })], [], settings, []);
+    expect([...m4.values()].flatMap((v) => v.requestedDate ?? []).map((i) => i.message)).toContain('충돌: 같은 업체 하루 최대 2건 초과 — 새업체 12-01(화) 3건 — 가져온 뒤 일정 조정 필요');
   });
 
   it('기존 일정과 합쳐 하루 최대를 넘으면 희망일 칸에 경고 (막지 않음)', () => {

@@ -61,6 +61,20 @@ function group<T>(list: T[], key: (x: T) => string | null): Map<string, T[]> {
   return m;
 }
 
+/**
+ * 건수 세기: 같은 업체가 같은 장소로 오는 건은 품목이 여러 개여도 한 번 방문(1건)으로 셉니다.
+ * 업체명이 비어 있으면 건마다 따로 셉니다.
+ */
+export function visitCount(list: Slot[]): number {
+  return new Set(list.map((s) => (s.vendorName ? `${s.vendorName}\u0000${s.location.trim()}` : `#${s.id}`))).size;
+}
+
+/** '4건' 또는 '3건(품목 5개)' */
+const countLabel = (list: Slot[]) => {
+  const v = visitCount(list);
+  return v === list.length ? `${v}건` : `${v}건(품목 ${list.length}개)`;
+};
+
 /** 하루치 충돌 */
 export function dayConflicts(date: string, slots: Slot[], r: ConflictRules, nameOf: (id: string) => string): Conflict[] {
   const day = slots.filter((s) => counts(s) && s.date === date);
@@ -70,20 +84,20 @@ export function dayConflicts(date: string, slots: Slot[], r: ConflictRules, name
     const h = r.holidays.dates.find((x) => x.date === date);
     if (h && day.length) out.push({ rule: 'holiday', date, ids: day.map((s) => s.id), message: `검수 불가일입니다 — ${md}${h.name ? ` ${h.name}` : ''}` });
   }
-  if (r.maxPerDay.enabled && day.length > r.maxPerDay.value) {
-    out.push({ rule: 'maxPerDay', date, ids: day.map((s) => s.id), message: `하루 최대 검수 건수(${r.maxPerDay.value}건) 초과 — ${md} ${day.length}건` });
+  if (r.maxPerDay.enabled && visitCount(day) > r.maxPerDay.value) {
+    out.push({ rule: 'maxPerDay', date, ids: day.map((s) => s.id), message: `하루 최대 검수 건수(${r.maxPerDay.value}건) 초과 — ${md} ${countLabel(day)}` });
   }
   if (r.maxPerInspector.enabled) {
     for (const [pid, list] of group(day, (s) => s.inspectorId)) {
-      if (list.length > r.maxPerInspector.value) {
-        out.push({ rule: 'maxPerInspector', date, ids: list.map((s) => s.id), message: `검수자 1인당 하루 최대 ${r.maxPerInspector.value}건 초과 — ${nameOf(pid)} ${md} ${list.length}건` });
+      if (visitCount(list) > r.maxPerInspector.value) {
+        out.push({ rule: 'maxPerInspector', date, ids: list.map((s) => s.id), message: `검수자 1인당 하루 최대 ${r.maxPerInspector.value}건 초과 — ${nameOf(pid)} ${md} ${countLabel(list)}` });
       }
     }
   }
   if (r.maxPerVendor.enabled) {
     for (const [v, list] of group(day, (s) => s.vendorName || null)) {
-      if (list.length > r.maxPerVendor.value) {
-        out.push({ rule: 'maxPerVendor', date, ids: list.map((s) => s.id), message: `같은 업체 하루 최대 ${r.maxPerVendor.value}건 초과 — ${v} ${md} ${list.length}건` });
+      if (visitCount(list) > r.maxPerVendor.value) {
+        out.push({ rule: 'maxPerVendor', date, ids: list.map((s) => s.id), message: `같은 업체 하루 최대 ${r.maxPerVendor.value}건 초과 — ${v} ${md} ${countLabel(list)}` });
       }
     }
   }
