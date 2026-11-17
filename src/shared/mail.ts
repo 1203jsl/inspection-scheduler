@@ -52,7 +52,7 @@ export const DEFAULT_TEMPLATES: Record<MailKind, MailTemplate> = {
 
 /** 설정 화면에 보여줄 치환값 (같은 뜻의 다른 이름도 받아 줌) */
 export const PLACEHOLDERS = [
-  '{업체명}', '{신청번호}', '{품명}', '{품번}', '{수량}', '{검수품목}', '{희망일}', '{희망시간}',
+  '{업체명}', '{프로젝트명}', '{신청번호}', '{품명}', '{품번}', '{수량}', '{검수품목}', '{희망일}', '{희망시간}',
   '{검수일}', '{검수시간}', '{검수장소}', '{검수자}', '{담당자명}', '{목록}', '{건수}', '{확정일}',
   '{결과}', '{불합격사유}', '{변경사유}', '{취소사유}', '{보내는사람}',
 ];
@@ -66,7 +66,7 @@ const dash = (v: unknown) => (v === null || v === undefined || v === '' ? '-' : 
 
 /** {목록}의 한 건 (확정·변경은 일정까지) */
 export function itemLine(i: Inspection, kind: MailKind, inspectorName: (id: string | null) => string): string {
-  const head = `- ${i.id} · ${dash(i.itemName)}${i.spec ? ` (${i.spec})` : ''} · 수량 ${dash(i.quantity)}`;
+  const head = `- ${i.id}${i.projectName ? ` · [${i.projectName}]` : ''} · ${dash(i.itemName)}${i.spec ? ` (${i.spec})` : ''} · 수량 ${dash(i.quantity)}`;
   if (kind === 'confirmed' || kind === 'changed') {
     const who = inspectorName(i.schedule.inspectorId);
     return `${head}\n  검수 일시: ${dash(fmtYMD(i.schedule.date))} ${i.schedule.time ?? ''} · 장소: ${dash(i.schedule.location)}${who ? ` · 검수자: ${who}` : ''}`;
@@ -87,8 +87,10 @@ export function mailVars(
   const result = i.result ? (i.result.verdict === 'pass' ? '합격' : '불합격') : '-';
   const v: Record<string, string> = {
     업체명: dash(i.vendorName),
+    프로젝트명: dash(i.projectName),
     신청번호: list.map((x) => x.id).join(', '),
-    품명: dash(i.itemName),
+    품명: dash(i.spec ? `${i.itemName} (${i.spec})` : i.itemName),
+    '품명/품번': dash(i.spec ? `${i.itemName} (${i.spec})` : i.itemName),
     품번: dash(i.spec),
     '품번/규격': dash(i.spec),
     수량: dash(i.quantity),

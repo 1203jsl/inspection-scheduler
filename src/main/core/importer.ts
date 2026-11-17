@@ -39,7 +39,7 @@ export interface ValidateContext {
 }
 
 const EMPTY_FIELDS = (): RequestFields => ({
-  vendorName: '', category: '', itemName: '', spec: '', quantity: null, requestedDate: null, requestedTime: null,
+  vendorName: '', projectName: '', category: '', itemName: '', spec: '', quantity: null, requestedDate: null, requestedTime: null,
   location: '', contactName: '', contactPhone: '', contactEmail: '', note: '',
 });
 
@@ -67,6 +67,7 @@ export function buildPreviewRows(
     const text = (k: keyof RequestFields | 'id') => cellText(r.values[k as FieldKey]);
     p.id = text('id') ? normalizeId(text('id')) : '';
     p.vendorName = text('vendorName');
+    p.projectName = text('projectName');
     p.category = text('category');
     p.itemName = text('itemName');
     p.spec = text('spec');
@@ -214,7 +215,7 @@ export function applyImport(inp: ApplyInput): ApplyOutput {
     const p = row.parsed;
     const source: SourceRef = { file: inp.sourcePaths[row.fileIndex], row: row.rowNumber, importedAt: iso, importedBy: inp.user.displayName };
     const fields: RequestFields = {
-      vendorName: p.vendorName, category: p.category, itemName: p.itemName, spec: p.spec, quantity: p.quantity,
+      vendorName: p.vendorName, projectName: p.projectName, category: p.category, itemName: p.itemName, spec: p.spec, quantity: p.quantity,
       requestedDate: p.requestedDate, requestedTime: p.requestedTime, location: p.location,
       contactName: p.contactName, contactPhone: p.contactPhone, contactEmail: p.contactEmail, note: p.note,
     };

@@ -43,7 +43,7 @@ function findHeader(ws: ExcelJS.Worksheet, def: ExcelTemplateDef) {
     if (!best || hits > best.hits) best = { row: r, map, hits };
   }
   // 머리글 4개 이상 맞으면 양식으로 봅니다 (빠진 필수 열은 따로 알려줌)
-  return best && best.hits >= Math.min(4, Math.ceil(def.columns.length / 2)) ? best : null;
+  return best && best.hits >= Math.min(4, Math.ceil(def.columns.filter((c) => !c.importOnly).length / 2)) ? best : null;
 }
 
 /** 업체가 보낸 엑셀 파일을 읽어 행 목록을 돌려줍니다. */
@@ -74,7 +74,7 @@ export async function readWorkbook(data: Buffer | ArrayBuffer, settings: Setting
     }
   }
   if (!ws || !header) {
-    throw new AppError('UNKNOWN', `검수 신청 양식의 머리글을 찾을 수 없습니다. 우리가 보낸 양식(${def.columns.map((c) => c.header).join(', ')})에 작성했는지 확인하세요.`);
+    throw new AppError('UNKNOWN', `검수 신청 양식의 머리글을 찾을 수 없습니다. 우리가 보낸 양식(${def.columns.filter((c) => !c.importOnly).map((c) => c.header).join(', ')})에 작성했는지 확인하세요.`);
   }
 
   const missingRequired = def.columns.filter((c) => c.required && !header!.map[c.key]).map((c) => `'${c.header}'`);
@@ -82,7 +82,7 @@ export async function readWorkbook(data: Buffer | ArrayBuffer, settings: Setting
     throw new AppError('UNKNOWN', `필수 열 ${missingRequired.join(', ')}을(를) 찾을 수 없습니다. 양식의 머리글 이름을 바꾸지 말고 다시 작성해 달라고 업체에 요청하세요.`);
   }
   const warnings = def.columns
-    .filter((c) => !c.required && !header!.map[c.key] && c.key !== 'id')
+    .filter((c) => !c.required && !c.importOnly && !header!.map[c.key] && c.key !== 'id')
     .map((c) => `'${c.header}' 열이 없어 빈 값으로 읽습니다.`);
   if (!header.map.id) warnings.push("'신청번호' 열이 없어 모든 행을 신규로 봅니다.");
 

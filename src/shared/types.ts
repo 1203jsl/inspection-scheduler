@@ -27,7 +27,7 @@ export interface ListFile<T> extends FileMeta {
 
 /** 업체 신청 항목 (엑셀 열과 1:1) */
 export type FieldKey =
-  | 'id' | 'vendorName' | 'category' | 'itemName' | 'spec' | 'quantity'
+  | 'id' | 'vendorName' | 'projectName' | 'category' | 'itemName' | 'spec' | 'quantity'
   | 'requestedDate' | 'requestedTime' | 'location' | 'contactName' | 'contactPhone' | 'contactEmail' | 'note';
 
 export interface ColumnDef {
@@ -39,6 +39,8 @@ export interface ColumnDef {
   required?: boolean;
   /** 엑셀 열 너비 */
   width?: number;
+  /** 새 양식에는 쓰지 않고, 업체가 이 열을 따로 적어 보냈을 때만 읽음 */
+  importOnly?: boolean;
 }
 
 /** 양식 버전별 열 정의. 양식이 바뀌면 settings.json 에 새 버전을 추가합니다. */
@@ -72,6 +74,8 @@ export const STATUS_LABEL: Record<InspectionStatus, string> = {
 /** 업체가 신청한 값 */
 export interface RequestFields {
   vendorName: string;
+  /** 프로젝트명 (양식 v2부터) */
+  projectName: string;
   category: string;
   itemName: string;
   spec: string;
@@ -88,7 +92,7 @@ export interface RequestFields {
 }
 
 export const REQUEST_FIELDS: (keyof RequestFields)[] = [
-  'vendorName', 'category', 'itemName', 'spec', 'quantity', 'requestedDate', 'requestedTime',
+  'vendorName', 'projectName', 'category', 'itemName', 'spec', 'quantity', 'requestedDate', 'requestedTime',
   'location', 'contactName', 'contactPhone', 'contactEmail', 'note',
 ];
 

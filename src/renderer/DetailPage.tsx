@@ -5,7 +5,7 @@ import { mailCovers, pendingMail } from '../shared/mail';
 import { DEFAULT_NOTIFY, deadlineLabel, resultNotice } from '../shared/reminders';
 import { fmtStamp, fmtYMD } from '../shared/dates';
 import {
-  addNote, can, cancel, change, confirm, editRequest, FIELD_LABEL, nextAction, resultMissing, startNegotiation, WorkflowError,
+  addNote, can, cancel, change, confirm, editRequest, FIELD_LABEL, itemLabel, nextAction, resultMissing, startNegotiation, WorkflowError,
 } from '../shared/workflow';
 import { api } from './api';
 import { Alert, ErrorAlert, Icon } from './components';
@@ -82,7 +82,7 @@ export function DetailPage({ id, from }: { id: string; from?: Route }) {
           <div>
             <div className="help">신청번호 {insp.id}</div>
             <div style={{ font: '700 22px/30px var(--font-sans)', display: 'flex', alignItems: 'center', gap: 8 }}>
-              {insp.vendorName} · {insp.itemName} <StatusBadge i={insp} />
+              {insp.vendorName}{insp.projectName ? ` · ${insp.projectName}` : ''} · {itemLabel(insp)} <StatusBadge i={insp} />
             </div>
           </div>
           <div className="sp" />
@@ -215,8 +215,8 @@ function InfoTable({ insp, inspectorName }: { insp: Inspection; inspectorName: (
   const rows: [string, string, string][] = [
     ['희망일 / 검수일', when(o.requestedDate, o.requestedTime), when(insp.schedule.date, insp.schedule.time)],
     ['검수 품목', dash(o.category), dash(insp.category)],
-    ['품명', dash(o.itemName), dash(insp.itemName)],
-    ['품번/규격', dash(o.spec), dash(insp.spec)],
+    ['프로젝트명', dash(o.projectName), dash(insp.projectName)],
+    ['품명/품번', dash(itemLabel(o)), dash(itemLabel(insp))],
     ['수량', dash(o.quantity), dash(insp.quantity)],
     ['장소', dash(o.location), dash(insp.schedule.location)],
     ['검수자', '—', insp.schedule.inspectorId ? `${inspectorName(insp.schedule.inspectorId)} (배정)` : '(미배정)'],

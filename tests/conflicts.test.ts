@@ -166,7 +166,7 @@ describe('가져오기 충돌 경고', () => {
   })) as unknown as Inspection[];
   const row = (n: number, over: Partial<PreviewRow['parsed']> = {}, kind: PreviewRow['kind'] = 'new'): PreviewRow => ({
     key: `0:${n}`, fileIndex: 0, fileName: 'a.xlsx', rowNumber: n, kind, target: 'new', display: {} as any, issues: {}, defaultInclude: true,
-    parsed: { id: '', vendorName: '새업체', category: '', itemName: '', spec: '', quantity: 1, requestedDate: '2026-12-01', requestedTime: '17:00', location: 'B', contactName: '', contactPhone: '', contactEmail: '', note: '', ...over },
+    parsed: { id: '', vendorName: '새업체', projectName: '', category: '', itemName: '', spec: '', quantity: 1, requestedDate: '2026-12-01', requestedTime: '17:00', location: 'B', contactName: '', contactPhone: '', contactEmail: '', note: '', ...over },
   });
 
   it('검수 신청 내역에서 같은 업체·같은 장소·같은 시간대 여러 행은 충돌 경고 없음', () => {

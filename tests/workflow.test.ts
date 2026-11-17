@@ -5,7 +5,7 @@ import {
   resultMissing, startNegotiation, statusBadge, WorkflowError,
 } from '../src/shared/workflow';
 import { applyImport } from '../src/main/core/importer';
-import { migrate } from '../src/main/core/schema';
+import { CURRENT_SCHEMA, migrate } from '../src/main/core/schema';
 import { normalizeTime } from '../src/shared/dates';
 
 const HONG = { account: 'hong.gd', displayName: '홍길동' };
@@ -18,7 +18,7 @@ const INSPECTORS: Inspector[] = [
 
 function make(over: Partial<Inspection> = {}): Inspection {
   const req = {
-    vendorName: '한솔정밀', category: 'TANK', itemName: '베이스 플레이트', spec: 'BP-2205', quantity: 10,
+    vendorName: '한솔정밀', projectName: '', category: 'TANK', itemName: '베이스 플레이트', spec: 'BP-2205', quantity: 10,
     requestedDate: '2026-12-01', requestedTime: '10:30', location: '수입검사실 A',
     contactName: '김철수', contactPhone: '', contactEmail: 'kim@hansol.example.com', note: '',
   };
@@ -126,7 +126,8 @@ describe('구조 변환·가져오기 연동', () => {
   it('inspections v1 → v2: 현재 일정을 업체 희망값으로 채움', () => {
     const v1 = { schemaVersion: 1, revision: 2, items: [{ id: 'IN-2026-0001', requestedDate: '2026-12-01', requestedTime: '10:30', location: 'A', history: [] }] };
     const v2 = migrate('inspections', v1);
-    expect(v2.schemaVersion).toBe(2);
+    expect(v2.schemaVersion).toBe(CURRENT_SCHEMA.inspections);
+    expect(v2.items[0].projectName).toBe('');
     expect(v2.items[0].schedule).toEqual({ date: '2026-12-01', time: '10:30', location: 'A', inspectorId: null });
     expect(v2.items[0].confirmedAt).toBeNull();
   });

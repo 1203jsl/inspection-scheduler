@@ -7,9 +7,10 @@ import { useApp } from './ctx';
 const COLS: { key: FieldKey; label: string; num?: boolean }[] = [
   { key: 'id', label: '신청번호' },
   { key: 'vendorName', label: '업체명' },
+  { key: 'projectName', label: '프로젝트명' },
   { key: 'category', label: '검수 품목' },
-  { key: 'itemName', label: '품명' },
-  { key: 'spec', label: '품번/규격' },
+  { key: 'itemName', label: '품명/품번' },
+  { key: 'spec', label: '품번(따로 적음)' },
   { key: 'quantity', label: '수량', num: true },
   { key: 'requestedDate', label: '희망일' },
   { key: 'requestedTime', label: '시간' },
@@ -96,6 +97,8 @@ export function ImportPage({ onImported, onSaveError, onLockChange }: {
   };
 
   const rows = preview?.rows ?? [];
+  // 품번을 따로 적은 파일(옛 양식 등)일 때만 품번 열을 보여 줌
+  const cols = rows.some((r) => r.display.spec) ? COLS : COLS.filter((c) => c.key !== 'spec');
   const counts = useMemo(() => {
     const c = { new: 0, update: 0, error: 0, incNew: 0, incUpd: 0, incErr: 0 };
     for (const r of rows) {
@@ -243,12 +246,12 @@ export function ImportPage({ onImported, onSaveError, onLockChange }: {
                       </th>
                       <th>판정</th>
                       <th>파일·행</th>
-                      {COLS.map((c) => <th key={c.key} className={c.num ? 'num' : undefined}>{c.label}</th>)}
+                      {cols.map((c) => <th key={c.key} className={c.num ? 'num' : undefined}>{c.label}</th>)}
                     </tr>
                   </thead>
                   <tbody>
                     {rows.map((r, idx) => (
-                      <PreviewTr key={r.key} row={r} checked={include.has(r.key)} onToggle={() => toggle(r.key)}
+                      <PreviewTr key={r.key} row={r} cols={cols} checked={include.has(r.key)} onToggle={() => toggle(r.key)}
                         tipUp={idx >= rows.length - 3 && rows.length > 4} />
                     ))}
                   </tbody>
@@ -290,7 +293,7 @@ export function ImportPage({ onImported, onSaveError, onLockChange }: {
   );
 }
 
-function PreviewTr({ row, checked, onToggle, tipUp }: { row: PreviewRow; checked: boolean; onToggle: () => void; tipUp: boolean }) {
+function PreviewTr({ row, cols, checked, onToggle, tipUp }: { row: PreviewRow; cols: typeof COLS; checked: boolean; onToggle: () => void; tipUp: boolean }) {
   const rowIssues = row.issues.row ?? [];
   return (
     <tr className={checked ? undefined : 'muted'}>
@@ -299,7 +302,7 @@ function PreviewTr({ row, checked, onToggle, tipUp }: { row: PreviewRow; checked
         {rowIssues.length ? <Flagged issues={rowIssues} tipUp={tipUp}>{KIND[row.kind]}</Flagged> : KIND[row.kind]}
       </td>
       <td className="muted" title={row.fileName}>{row.fileName.length > 14 ? row.fileName.slice(0, 12) + '…' : row.fileName} · {row.rowNumber}</td>
-      {COLS.map((c) => {
+      {cols.map((c) => {
         const issues = row.issues[c.key] ?? [];
         const d = c.key !== 'id' ? row.diff?.[c.key as Exclude<FieldKey, 'id'>] : undefined;
         const value = c.key === 'id' ? (row.parsed.id || <span className="muted">(신규 부여)</span>)

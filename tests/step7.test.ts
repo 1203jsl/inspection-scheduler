@@ -28,7 +28,7 @@ let n = 0;
 function make(over: Partial<Inspection> & { date?: string; time?: string; who?: string | null } = {}): Inspection {
   const { date = '2026-11-14', time = '10:00', who = 'p1', ...rest } = over;
   const req = {
-    vendorName: '한솔정밀', category: 'TANK', itemName: '베이스 플레이트', spec: 'BP-2205', quantity: 10,
+    vendorName: '한솔정밀', projectName: '', category: 'TANK', itemName: '베이스 플레이트', spec: 'BP-2205', quantity: 10,
     requestedDate: date, requestedTime: time, location: '수입검사실 A', contactName: '김철수', contactPhone: '', contactEmail: 'kim@hansol.example.com', note: '',
   };
   return {

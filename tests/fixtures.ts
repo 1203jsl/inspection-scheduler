@@ -4,17 +4,18 @@
  */
 import ExcelJS from 'exceljs';
 import { buildTemplate } from '../src/main/core/excel/template';
-import { TEMPLATE_V1, DEFAULT_INSPECTION_ITEMS } from '../src/main/core/schema';
+import { TEMPLATE_V1, TEMPLATE_V2, DEFAULT_INSPECTION_ITEMS } from '../src/main/core/schema';
+import type { ExcelTemplateDef } from '../src/shared/types';
 
 type Cell = string | number | Date | null;
 const D = (y: number, m: number, d: number) => new Date(Date.UTC(y, m - 1, d));
 
 /** 우리가 보낸 빈 양식에 업체가 3행부터 적어 회신한 파일 */
-export async function vendorReply(rows: Cell[][], today = new Date(2026, 10, 9)): Promise<Buffer> {
-  const buf = await buildTemplate(TEMPLATE_V1, DEFAULT_INSPECTION_ITEMS, today);
+export async function vendorReply(rows: Cell[][], today = new Date(2026, 10, 9), def: ExcelTemplateDef = TEMPLATE_V1): Promise<Buffer> {
+  const buf = await buildTemplate(def, DEFAULT_INSPECTION_ITEMS, today);
   const wb = new ExcelJS.Workbook();
   await wb.xlsx.load(buf as unknown as ArrayBuffer);
-  const ws = wb.getWorksheet(TEMPLATE_V1.sheetName)!;
+  const ws = wb.getWorksheet(def.sheetName)!;
   rows.forEach((r, i) => r.forEach((v, j) => (ws.getCell(3 + i, j + 1).value = v)));
   return Buffer.from(await wb.xlsx.writeBuffer());
 }
@@ -29,7 +30,16 @@ export async function freeformFile(headers: string[], rows: Cell[][]): Promise<B
   return Buffer.from(await wb.xlsx.writeBuffer());
 }
 
-// 열 순서: 신청번호 업체명 검수품목 품명 품번/규격 수량 희망일 희망시간 장소 담당자 연락처 이메일 비고
+/** 양식 v2(현재 양식)로 업체가 회신한 파일 */
+export const vendorReplyV2 = (rows: Cell[][], today = new Date(2026, 10, 9)) => vendorReply(rows, today, TEMPLATE_V2);
+
+// v2 열 순서: 신청번호 업체명 프로젝트명 검수품목 품명/품번 수량 희망일 희망시간 장소 담당자 연락처 이메일 비고
+export const V2_ROWS: Cell[][] = [
+  [null, '한솔정밀', 'P-2611 CVD 챔버', 'TANK', 'BP-2205 베이스 플레이트', 10, D(2026, 12, 1), '10:30', '수입검사실 A', '김철수', '010-1111-2222', 'kim@hansol.example.com', ''],
+  [null, '미래기전', null, 'BODY', 'CH-0330 커넥터 하네스', 120, D(2026, 12, 2), '10:00', '수입검사실 B', '이영희', '010-3333-4444', 'lee@mirae.example.com', '프로젝트명 비움'],
+];
+
+// v1 열 순서: 신청번호 업체명 검수품목 품명 품번/규격 수량 희망일 희망시간 장소 담당자 연락처 이메일 비고
 
 /** 정상 신규 3건 */
 export const NORMAL_ROWS: Cell[][] = [

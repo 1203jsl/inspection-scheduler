@@ -22,7 +22,7 @@ const FAKE_CRYPTO: Crypto = {
 
 function insp(over: Partial<Inspection> = {}): Inspection {
   const req = {
-    vendorName: '한솔정밀', category: 'TANK', itemName: '베이스 플레이트', spec: 'BP-2205', quantity: 10,
+    vendorName: '한솔정밀', projectName: '', category: 'TANK', itemName: '베이스 플레이트', spec: 'BP-2205', quantity: 10,
     requestedDate: '2026-12-01', requestedTime: '10:30', location: '수입검사실 A',
     contactName: '김철수', contactPhone: '', contactEmail: 'kim@hansol.example.com', note: '',
   };

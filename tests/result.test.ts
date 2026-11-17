@@ -19,7 +19,7 @@ const INSPECTORS: Inspector[] = [
 
 function make(over: Partial<Inspection> = {}): Inspection {
   const req = {
-    vendorName: '대양산업', category: 'TANK', itemName: '필터 엘리먼트', spec: 'FE-100', quantity: 40,
+    vendorName: '대양산업', projectName: '', category: 'TANK', itemName: '필터 엘리먼트', spec: 'FE-100', quantity: 40,
     requestedDate: '2026-11-10', requestedTime: '10:00', location: 'A', contactName: '정대양', contactPhone: '', contactEmail: 'j@d.example.com', note: '',
   };
   return {

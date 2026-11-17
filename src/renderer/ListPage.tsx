@@ -1,14 +1,14 @@
 import { useMemo, useState } from 'react';
 import type { AppErrorInfo, Inspection, InspectionStatus } from '../shared/types';
 import { addDays, addMonths, fmtMD, monthEnd, monthStart, weekStart } from '../shared/dates';
-import { assignInspector, cancel, confirm, resultMissing, startNegotiation, statusBadge, WorkflowError } from '../shared/workflow';
+import { assignInspector, cancel, confirm, itemLabel, resultMissing, startNegotiation, statusBadge, WorkflowError } from '../shared/workflow';
 import { conflictMap, conflictsFor, toSlot } from '../shared/conflicts';
 import { Alert, ErrorAlert, Icon } from './components';
 import { api } from './api';
 import { useApp, type ListPreset } from './ctx';
 import { CancelDialog } from './dialogs';
 
-type SortKey = 'id' | 'vendorName' | 'category' | 'itemName' | 'spec' | 'quantity' | 'date' | 'time' | 'location' | 'inspector' | 'status' | 'result';
+type SortKey = 'id' | 'vendorName' | 'projectName' | 'category' | 'itemName' | 'quantity' | 'date' | 'time' | 'location' | 'inspector' | 'status' | 'result';
 type Period = '' | 'today' | 'week' | 'month' | 'nextMonth' | 'day';
 
 const STATUS_OPTIONS: { v: InspectionStatus; label: string }[] = [
@@ -67,7 +67,7 @@ export function ListPage({ preset }: { preset?: ListPreset }) {
   const rows = useMemo(() => {
     const kw = q.trim().toLowerCase();
     const f = items.filter((i) => {
-      if (kw && ![i.id, i.vendorName, i.itemName, i.spec, i.category].some((s) => (s ?? '').toLowerCase().includes(kw))) return false;
+      if (kw && ![i.id, i.vendorName, i.projectName, i.itemName, i.spec, i.category].some((s) => (s ?? '').toLowerCase().includes(kw))) return false;
       if (range && (!i.schedule.date || i.schedule.date < range[0] || i.schedule.date > range[1])) return false;
       if (vendor && i.vendorName !== vendor) return false;
       if (insp === '__none' ? !!i.schedule.inspectorId || ['done', 'canceled'].includes(i.status) : insp && i.schedule.inspectorId !== insp) return false;
@@ -257,9 +257,9 @@ export function ListPage({ preset }: { preset?: ListPreset }) {
                 </th>
                 <Th k="id">신청번호</Th>
                 <Th k="vendorName">업체명</Th>
+                <Th k="projectName">프로젝트명</Th>
                 <Th k="category">검수 품목</Th>
-                <Th k="itemName">품명</Th>
-                <Th k="spec">품번/규격</Th>
+                <Th k="itemName">품명/품번</Th>
                 <Th k="quantity" num>수량</Th>
                 <Th k="date">검수일</Th>
                 <Th k="time">시간</Th>
@@ -281,9 +281,9 @@ export function ListPage({ preset }: { preset?: ListPreset }) {
                   </td>
                   <td><a href="#" onClick={(e) => { e.preventDefault(); go({ page: 'detail', id: i.id, from: { page: 'list' } }); }}>{i.id}</a></td>
                   <td>{i.vendorName}</td>
+                  <td title={i.projectName}>{i.projectName}</td>
                   <td>{i.category}</td>
-                  <td title={i.itemName}>{i.itemName}</td>
-                  <td title={i.spec}>{i.spec}</td>
+                  <td title={itemLabel(i)}>{itemLabel(i)}</td>
                   <td className="num">{i.quantity ?? ''}</td>
                   {(() => {
                     const cs = conflictOf(i);

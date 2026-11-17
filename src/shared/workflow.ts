@@ -50,9 +50,14 @@ function ensure(insp: Inspection, action: Action) {
   }
 }
 
+/** 품명/품번 한 칸 표시. 옛 양식(v1)으로 품번을 따로 받은 건은 괄호로 붙임 */
+export function itemLabel(i: { itemName: string; spec?: string }): string {
+  return i.spec ? `${i.itemName} (${i.spec})` : i.itemName;
+}
+
 /** 변경 이력에 쓰는 항목 이름 */
 export const FIELD_LABEL: Record<string, string> = {
-  vendorName: '업체명', category: '검수 품목', itemName: '품명', spec: '품번/규격', quantity: '수량',
+  vendorName: '업체명', projectName: '프로젝트명', category: '검수 품목', itemName: '품명/품번', spec: '품번/규격', quantity: '수량',
   requestedDate: '검수 희망일', requestedTime: '희망 시간', location: '검수 장소(신청)',
   contactName: '업체 담당자', contactPhone: '연락처', contactEmail: '이메일', note: '비고',
   'schedule.date': '검수일', 'schedule.time': '검수 시간', 'schedule.location': '검수 장소',

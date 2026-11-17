@@ -12,7 +12,8 @@ export const DATA_ROWS = 300;
 const EXAMPLE: Partial<Record<FieldKey, string | number | Date>> = {
   id: EXAMPLE_MARK,
   vendorName: '한솔정밀',
-  itemName: '베이스 플레이트',
+  projectName: 'P-2611 CVD 챔버',
+  itemName: 'BP-2205 베이스 플레이트',
   spec: 'BP-2205 / AL6061',
   quantity: 10,
   requestedTime: '10:30',
@@ -29,7 +30,8 @@ const GUIDE = [
   ['1. [검수신청] 시트의 3행부터 검수 1건당 한 행씩 작성합니다. 2행은 작성 예시입니다.'],
   ['2. 신규 신청은 [신청번호]를 비워 두세요. 등록 후 신청번호를 메일로 알려 드립니다.'],
   ['3. 이미 받은 신청번호의 일정·수량 등을 고칠 때는 [신청번호]를 적고 바뀐 내용을 입력해 회신하세요.'],
-  ['4. [검수 품목]은 칸을 누르면 나오는 목록에서 고르세요.'],
+  ['4. [검수 품목]은 칸을 누르면 나오는 목록에서 고르세요. [프로젝트명]은 해당되는 프로젝트가 있으면 적어 주세요.'],
+  ['   [품명/품번]은 한 칸에 품번과 품명을 함께 적습니다. 예: BP-2205 베이스 플레이트'],
   ['5. [검수 희망일]은 2026-11-14 처럼 날짜로, [희망 시간]은 13:30 처럼 24시간 형식으로 적습니다.'],
   ['6. [수량]은 1 이상의 숫자만 적습니다 (단위 제외).'],
   ['7. [업체 담당자]와 [이메일]은 일정 확정·결과 통보 메일을 받을 분으로 적어 주세요.'],
@@ -39,7 +41,9 @@ const GUIDE = [
 ];
 
 /** 빈 양식(.xlsx)을 만듭니다. */
-export async function buildTemplate(def: ExcelTemplateDef, items: string[], today = new Date()): Promise<Buffer> {
+export async function buildTemplate(full: ExcelTemplateDef, items: string[], today = new Date()): Promise<Buffer> {
+  // 가져올 때만 쓰는 열(importOnly)은 빈 양식에 넣지 않음
+  const def: ExcelTemplateDef = { ...full, columns: full.columns.filter((c) => !c.importOnly) };
   const wb = new ExcelJS.Workbook();
   wb.creator = '검수일정 관리';
   wb.created = today;

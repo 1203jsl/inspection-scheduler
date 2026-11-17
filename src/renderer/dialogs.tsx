@@ -2,7 +2,7 @@ import { useState } from 'react';
 import type { AppErrorInfo, Inspection, Inspector, RequestFields, Schedule, Vendor } from '../shared/types';
 import { normalizeTime } from '../shared/dates';
 import { conflictsFor, toSlot } from '../shared/conflicts';
-import { checkForce, checkSchedule, WorkflowError, type ForceInfo } from '../shared/workflow';
+import { checkForce, checkSchedule, itemLabel, WorkflowError, type ForceInfo } from '../shared/workflow';
 import { Alert, Dialog, ErrorAlert, Icon } from './components';
 import { useApp, useEditLock } from './ctx';
 
@@ -87,7 +87,7 @@ export function ScheduleDialog({ mode, insp, onClose, onSubmit }: {
         </button>
       </>}
     >
-      <p className="help" style={{ margin: 0 }}>{insp.id} · {insp.vendorName} · {insp.itemName} · 수량 {insp.quantity ?? '-'}</p>
+      <p className="help" style={{ margin: 0 }}>{insp.id} · {insp.vendorName} · {itemLabel(insp)} · 수량 {insp.quantity ?? '-'}</p>
       {mode === 'change' && <Alert kind="info">변경하면 상태가 '변경됨'이 되고, 다시 [확정]해야 합니다.</Alert>}
       <div className="form-row">
         <div className="field">
@@ -191,9 +191,10 @@ export function CancelDialog({ label, onClose, onSubmit }: {
 
 const INFO_FIELDS: { key: keyof RequestFields; label: string; type?: string }[] = [
   { key: 'vendorName', label: '업체명' },
+  { key: 'projectName', label: '프로젝트명' },
   { key: 'category', label: '검수 품목' },
-  { key: 'itemName', label: '품명' },
-  { key: 'spec', label: '품번/규격' },
+  { key: 'itemName', label: '품명/품번' },
+  { key: 'spec', label: '품번(옛 양식)' },
   { key: 'quantity', label: '수량', type: 'number' },
   { key: 'requestedDate', label: '검수 희망일', type: 'date' },
   { key: 'requestedTime', label: '희망 시간', type: 'hhmm' },
@@ -211,6 +212,8 @@ export function EditInfoDialog({ insp, onClose, onSubmit }: {
 }) {
   useEditLock(true);
   const { data } = useApp();
+  // 품번 칸은 옛 양식(v1)으로 품번을 따로 받은 건에만 보여 줌
+  const fields = INFO_FIELDS.filter((f) => f.key !== 'spec' || !!insp.spec);
   const [v, setV] = useState<Record<string, string>>(
     Object.fromEntries(INFO_FIELDS.map((f) => [f.key, insp[f.key] === null || insp[f.key] === undefined ? '' : String(insp[f.key])])),
   );
@@ -221,7 +224,7 @@ export function EditInfoDialog({ insp, onClose, onSubmit }: {
   if (qty && !(Number.isInteger(Number(qty)) && Number(qty) >= 1)) errs.quantity = '1 이상의 정수로 입력하세요.';
   if (v.contactEmail.trim() && !/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(v.contactEmail.trim())) errs.contactEmail = '이메일 형식이 올바르지 않습니다. 예: name@company.co.kr';
   if (!v.vendorName.trim()) errs.vendorName = '업체명을 입력하세요.';
-  if (!v.itemName.trim()) errs.itemName = '품명을 입력하세요.';
+  if (!v.itemName.trim()) errs.itemName = '품명/품번을 입력하세요.';
   if (v.requestedTime.trim() && !normalizeTime(v.requestedTime)) errs.requestedTime = '24시간 형식으로 입력하세요. 예: 13:30';
 
   const submit = () => {
@@ -247,7 +250,7 @@ export function EditInfoDialog({ insp, onClose, onSubmit }: {
     >
       <span className="help">업체가 신청한 내용입니다. 실제 검수 일정은 [확정]/[변경]에서 정합니다. 처음 신청한 값(원본)은 그대로 남습니다.</span>
       <div className="form-row" style={{ gridTemplateColumns: 'repeat(3, minmax(0, 1fr))' }}>
-        {INFO_FIELDS.map((f) => (
+        {fields.map((f) => (
           <div className="field" key={f.key}>
             <label htmlFor={`f-${f.key}`}>{f.label}</label>
             {f.key === 'category' ? (

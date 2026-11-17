@@ -12,8 +12,8 @@ import { buildPreviewRows, finalizePreview, nextId, normalizeId } from '../src/m
 import { ImportService } from '../src/main/core/importService';
 import { DataStore } from '../src/main/core/dataStore';
 import { AppError } from '../src/main/core/errors';
-import { CURRENT_SCHEMA, defaultSettings, migrate, TEMPLATE_V1, DEFAULT_INSPECTION_ITEMS } from '../src/main/core/schema';
-import { freeformFile, MIXED_ROWS, NORMAL_ROWS, REVISION_ROWS, vendorReply } from './fixtures';
+import { CURRENT_SCHEMA, defaultSettings, migrate, TEMPLATE_V1, TEMPLATE_V2, DEFAULT_INSPECTION_ITEMS } from '../src/main/core/schema';
+import { freeformFile, MIXED_ROWS, NORMAL_ROWS, REVISION_ROWS, V2_ROWS, vendorReply, vendorReplyV2 } from './fixtures';
 
 const settings: Settings = defaultSettings('hong.gd', '홍길동', '2026-11-09T00:00:00Z');
 const ctx = { settings, existing: [], today: '2026-11-09' };
@@ -83,6 +83,24 @@ describe('빈 양식', () => {
     expect((ws as any).sheetProtection?.sheet).toBe(true);
   });
 
+  it('양식 v2: 프로젝트명 열 추가, 품명/품번 한 열 (품번/규격 열은 없음)', async () => {
+    const buf = await buildTemplate(TEMPLATE_V2, DEFAULT_INSPECTION_ITEMS, new Date(2026, 10, 9));
+    const wb = new ExcelJS.Workbook();
+    await wb.xlsx.load(buf as unknown as ArrayBuffer);
+    const ws = wb.getWorksheet('검수신청')!;
+    const head = (ws.getRow(1).values as unknown[]).slice(1);
+    expect(head).toEqual(['신청번호', '업체명 *', '프로젝트명', '검수 품목 *', '품명/품번 *', '수량 *', '검수 희망일 *', '희망 시간', '검수 장소', '업체 담당자 *', '연락처', '이메일 *', '비고']);
+    expect(wb.getWorksheet('_meta')!.getCell('A2').value).toBe('v2');
+    const zip = await JSZip.loadAsync(buf);
+    const xml = await zip.file('xl/worksheets/sheet1.xml')!.async('string');
+    const ranges = [...xml.matchAll(/<dataValidation [^>]*type="(\w+)"[^>]*sqref="([^"]+)"/g)].map((m) => `${m[2]}:${m[1]}`).sort();
+    expect(ranges).toEqual(['D3:D302:list', 'F3:F302:whole', 'G3:G302:date', 'H3:H302:custom']);
+  });
+
+  it('새 설정의 기본 양식은 v2', () => {
+    expect(settings.currentTemplate).toBe('v2');
+  });
+
   it('빈 양식을 그대로 넣으면 0행 (예시 행은 건너뜀)', async () => {
     const r = await readWorkbook(await buildTemplate(TEMPLATE_V1, DEFAULT_INSPECTION_ITEMS), settings);
     expect(r.templateVersion).toBe('v1');
@@ -91,6 +109,30 @@ describe('빈 양식', () => {
 });
 
 describe('가져오기 판정', () => {
+  it('v2 회신: 프로젝트명·품명/품번을 읽고, 프로젝트명은 비워도 됨', async () => {
+    const r = await readWorkbook(await vendorReplyV2(V2_ROWS), settings);
+    expect(r.templateVersion).toBe('v2');
+    expect(r.warnings).toEqual([]);
+    const rows = finalizePreview(buildPreviewRows(r.rows, 0, 'a.xlsx', r.templateVersion, ctx), ctx);
+    expect(rows.map((x) => x.kind)).toEqual(['new', 'new']);
+    expect(rows[0].parsed).toMatchObject({ projectName: 'P-2611 CVD 챔버', itemName: 'BP-2205 베이스 플레이트', spec: '', category: 'TANK', quantity: 10 });
+    expect(rows[1].parsed.projectName).toBe('');
+  });
+
+  it('이미 보낸 v1 양식 회신도 그대로 읽는다 (품번은 따로 보관)', async () => {
+    const rows = await previewOf(await vendorReply(NORMAL_ROWS));
+    expect(rows[0].parsed).toMatchObject({ projectName: '', itemName: '베이스 플레이트', spec: 'BP-2205 / AL6061' });
+  });
+
+  it('양식 없이 품명·품번을 따로 적은 파일도 v2 기준으로 둘 다 읽는다', async () => {
+    const buf = await freeformFile(['업체명', '프로젝트', '검수 품목', '품명', '품번', '수량', '검수 희망일', '업체 담당자', '이메일'],
+      [['대양산업', 'PJT-7', 'TANK', '필터', 'FE-100', 5, new Date(Date.UTC(2026, 11, 4)), '정대양', 'jung@daeyang.example.com']]);
+    const r = await readWorkbook(buf, settings);
+    expect(r.warnings.some((w) => w.includes('품번'))).toBe(false);
+    const rows = finalizePreview(buildPreviewRows(r.rows, 0, 'a.xlsx', r.templateVersion, ctx), ctx);
+    expect(rows[0].parsed).toMatchObject({ projectName: 'PJT-7', itemName: '필터', spec: 'FE-100' });
+  });
+
   it('정상 파일은 모두 신규, 경고 없음', async () => {
     const rows = await previewOf(await vendorReply(NORMAL_ROWS));
     expect(rows.map((r) => r.kind)).toEqual(['new', 'new', 'new']);
@@ -301,5 +343,7 @@ describe('설정 구조 변환', () => {
     expect(v2.revision).toBe(4);
     expect(v2.inspectionItems).toEqual(DEFAULT_INSPECTION_ITEMS);
     expect(v2.excelTemplates[0].version).toBe('v1');
+    expect(v2.excelTemplates.map((t: any) => t.version)).toEqual(['v1', 'v2']);
+    expect(v2.currentTemplate).toBe('v2');
   });
 });

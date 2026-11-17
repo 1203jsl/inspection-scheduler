@@ -21,7 +21,7 @@ let n = 0;
 function make(over: Partial<Inspection> & { date?: string } = {}): Inspection {
   const { date = '2026-11-10', ...rest } = over;
   const req = {
-    vendorName: '대양산업', category: 'TANK', itemName: '필터', spec: '', quantity: 1, requestedDate: date, requestedTime: '10:00',
+    vendorName: '대양산업', projectName: '', category: 'TANK', itemName: '필터', spec: '', quantity: 1, requestedDate: date, requestedTime: '10:00',
     location: 'A', contactName: '', contactPhone: '', contactEmail: 'j@d.example.com', note: '',
   };
   return {

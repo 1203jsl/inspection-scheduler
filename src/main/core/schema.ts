@@ -6,10 +6,10 @@ import { AppError } from './errors';
 
 /** 이 프로그램이 이해하는 최신 구조 버전 (파일별) */
 export const CURRENT_SCHEMA: Record<DataFileKey, number> = {
-  inspections: 2,
+  inspections: 3,
   vendors: 1,
   inspectors: 1,
-  settings: 8,
+  settings: 9,
   mail_log: 1,
 };
 
@@ -34,6 +34,29 @@ export const TEMPLATE_V1: ExcelTemplateDef = {
   ],
 };
 
+/** 엑셀 양식 v2: 프로젝트명 추가, 품명·품번을 한 칸(품명/품번)으로 합침 */
+export const TEMPLATE_V2: ExcelTemplateDef = {
+  version: 'v2',
+  sheetName: '검수신청',
+  columns: [
+    { key: 'id', header: '신청번호', width: 15 },
+    { key: 'vendorName', header: '업체명', aliases: ['업체', '회사명'], required: true, width: 14 },
+    { key: 'projectName', header: '프로젝트명', aliases: ['프로젝트', 'PJT', 'PJT명', 'project'], width: 18 },
+    { key: 'category', header: '검수 품목', aliases: ['검수품목', '품목'], required: true, width: 12 },
+    { key: 'itemName', header: '품명/품번', aliases: ['품명', '품명 및 품번', '품명(품번)', '품명품번', '품번/품명'], required: true, width: 30 },
+    { key: 'quantity', header: '수량', required: true, width: 8 },
+    { key: 'requestedDate', header: '검수 희망일', aliases: ['희망일', '검수희망일'], required: true, width: 13 },
+    { key: 'requestedTime', header: '희망 시간', aliases: ['희망시간', '시간'], width: 10 },
+    { key: 'location', header: '검수 장소', aliases: ['검수장소', '장소'], width: 14 },
+    { key: 'contactName', header: '업체 담당자', aliases: ['담당자', '업체담당자'], required: true, width: 11 },
+    { key: 'contactPhone', header: '연락처', aliases: ['전화번호', '휴대폰'], width: 15 },
+    { key: 'contactEmail', header: '이메일', aliases: ['메일', 'e-mail', 'email'], required: true, width: 24 },
+    { key: 'note', header: '비고', width: 24 },
+    // 업체가 품번을 따로 적어 보낸 경우에만 읽음 (새 양식에는 없음)
+    { key: 'spec', header: '품번/규격', aliases: ['품번', '규격', '품번규격'], importOnly: true },
+  ],
+};
+
 export const DEFAULT_INSPECTION_ITEMS = ['TANK', 'BODY', 'VMB_TURN-KEY', 'UNITTURN-KEY', "Part's"];
 
 /**
@@ -53,6 +76,16 @@ export const MIGRATIONS: Partial<Record<DataFileKey, Record<number, Migration>>>
         confirmedBy: i.confirmedBy ?? null,
         negotiations: i.negotiations ?? [],
         result: i.result ?? null,
+      })),
+    }),
+    // v2 → v3: 프로젝트명 추가
+    2: (d) => ({
+      ...d,
+      schemaVersion: 3,
+      items: (d.items ?? []).map((i: any) => ({
+        ...i,
+        projectName: i.projectName ?? '',
+        original: i.original ? { projectName: '', ...i.original } : i.original,
       })),
     }),
   },
@@ -107,6 +140,11 @@ export const MIGRATIONS: Partial<Record<DataFileKey, Record<number, Migration>>>
       notify: { resultAlert: true, resultDays: 7, ...(d.notify ?? DEFAULT_NOTIFY) },
       resultReminderTemplate: d.resultReminderTemplate ?? { ...DEFAULT_RESULT_REMINDER_TEMPLATE },
     }),
+    // v8 → v9: 엑셀 양식 v2 (프로젝트명, 품명/품번 한 칸). 옛 v1 회신도 계속 읽음
+    8: (d) => {
+      const list = (d.excelTemplates ?? [TEMPLATE_V1]).filter((t: ExcelTemplateDef) => t.version !== 'v2');
+      return { ...d, schemaVersion: 9, excelTemplates: [...list, TEMPLATE_V2], currentTemplate: 'v2' };
+    },
   },
 };
 
@@ -121,8 +159,8 @@ export function defaultSettings(user: string, name: string, now: string): Settin
     lockStaleMinutes: 30,
     backupKeep: 50,
     inspectionItems: [...DEFAULT_INSPECTION_ITEMS],
-    excelTemplates: [TEMPLATE_V1],
-    currentTemplate: 'v1',
+    excelTemplates: [TEMPLATE_V1, TEMPLATE_V2],
+    currentTemplate: 'v2',
     conflictRules: structuredClone(DEFAULT_CONFLICT_RULES),
     mailTemplates: structuredClone(DEFAULT_TEMPLATES),
     mail: structuredClone(DEFAULT_MAIL_SETTINGS),
