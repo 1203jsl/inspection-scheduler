@@ -260,7 +260,7 @@ export interface ConflictRules {
   maxPerDay: RuleNum;
   /** 검수자 1인당 하루 최대 건수 */
   maxPerInspector: RuleNum;
-  /** 같은 시간대·같은 장소 중복 금지 (시작 시각 차이가 minutes 분 미만이면 같은 시간대) */
+  /** 같은 시간대·같은 장소 중복 금지 (시작 시각 차이가 minutes 분 미만이면 같은 시간대, 같은 업체끼리는 제외) */
   sameSlot: { enabled: boolean; minutes: number };
   /** 하루 최대 검수 수량 합계 */
   maxQtyPerDay: RuleNum;

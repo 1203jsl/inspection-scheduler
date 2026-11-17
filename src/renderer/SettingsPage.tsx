@@ -253,7 +253,7 @@ export function SettingsPage({ data, user, dataDir, onChangeFolder, onSaved, onS
           {NUM_RULES.slice(0, 2).map(numRule)}
           <div className="rule">
             <Switch label="같은 시간대·같은 장소 중복 금지" checked={rules.sameSlot.enabled} onChange={(v) => setRule('sameSlot', { ...rules.sameSlot, enabled: v })} />
-            <span className="help" style={{ width: 260 }}>시작 시각이 {rules.sameSlot.minutes}분 안쪽이면 같은 시간대</span>
+            <span className="help" style={{ width: 260 }}>시작 시각이 {rules.sameSlot.minutes}분 안쪽이면 같은 시간대 (같은 업체끼리는 제외)</span>
           </div>
           {NUM_RULES.slice(2).map(numRule)}
           <div className="rule" style={{ alignItems: 'flex-start' }}>

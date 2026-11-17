@@ -48,8 +48,13 @@ describe('충돌 규칙별 검사', () => {
   it('같은 시간대·같은 장소: 시작 시각 차이가 설정 분 미만이면 중복', () => {
     const r = only('sameSlot', { enabled: true, minutes: 60 });
     const a = slot({ id: 'IN-A', time: '10:00', location: '수입검사실 A' });
-    expect(msgs(conflictsFor(slot({ id: 'IN-B', time: '10:30' }), [a], r, nameOf))).toEqual(['같은 시간대·같은 장소 중복 — 11-10(화) 수입검사실 A 10:00(IN-A) / 10:30(IN-B)']);
-    expect(conflictsFor(slot({ time: '11:00' }), [a], r, nameOf)).toEqual([]); // 60분 차이는 허용
+    expect(msgs(conflictsFor(slot({ id: 'IN-B', time: '10:30', vendorName: '대양산업' }), [a], r, nameOf))).toEqual(['같은 시간대·같은 장소 중복 — 11-10(화) 수입검사실 A 10:00(IN-A) / 10:30(IN-B)']);
+    expect(conflictsFor(slot({ time: '11:00', vendorName: '대양산업' }), [a], r, nameOf)).toEqual([]); // 60분 차이는 허용
+    // 같은 업체가 같은 장소·같은 시간대에 여러 건 → 충돌 아님
+    expect(conflictsFor(slot({ id: 'IN-C', time: '10:00' }), [a], r, nameOf)).toEqual([]);
+    // 같은 업체끼리는 빼도 다른 업체와는 여전히 충돌
+    const b = slot({ id: 'IN-D', time: '10:10', vendorName: '서원테크' });
+    expect(msgs(conflictsFor(slot({ id: 'IN-E', time: '10:20' }), [a, b], r, nameOf))).toEqual(['같은 시간대·같은 장소 중복 — 11-10(화) 수입검사실 A 10:10(IN-D) / 10:20(IN-E)']);
     expect(conflictsFor(slot({ time: '10:00', location: '수입검사실 B' }), [a], r, nameOf)).toEqual([]);
     expect(conflictsFor(slot({ time: null }), [a], r, nameOf)).toEqual([]); // 시간 모르면 판단 안 함
   });
@@ -71,8 +76,8 @@ describe('충돌 규칙별 검사', () => {
   it('기본 기준은 30분: 30분 안쪽이면 같은 시간대, 30분 차이부터는 허용', () => {
     expect(DEFAULT_CONFLICT_RULES.sameSlot.minutes).toBe(30);
     const a = slot({ id: 'IN-A', time: '10:00' });
-    expect(conflictsFor(slot({ time: '10:29' }), [a], rules(), nameOf).map((c) => c.rule)).toContain('sameSlot');
-    expect(conflictsFor(slot({ time: '10:30' }), [a], rules(), nameOf).map((c) => c.rule)).not.toContain('sameSlot');
+    expect(conflictsFor(slot({ time: '10:29', vendorName: '대양산업' }), [a], rules(), nameOf).map((c) => c.rule)).toContain('sameSlot');
+    expect(conflictsFor(slot({ time: '10:30', vendorName: '대양산업' }), [a], rules(), nameOf).map((c) => c.rule)).not.toContain('sameSlot');
   });
 
   it('미확정 건(신청접수·등록·일정협의중·변경됨)도 충돌 검사에 포함, 취소만 빠짐', () => {
@@ -96,7 +101,8 @@ describe('충돌 규칙별 검사', () => {
 
   it('여러 규칙이 함께 걸리면 모두 알려준다', () => {
     const day = [slot({ inspectorId: 'p1', time: '09:00' }), slot({ inspectorId: 'p1', time: '13:00' }), slot({ time: '15:00' })];
-    const cs = conflictsFor(slot({ inspectorId: 'p1', time: '13:20' }), day, rules(), nameOf);
+    const day2 = [...day.slice(0, 2), slot({ time: '13:10', vendorName: '대양산업' })];
+    const cs = conflictsFor(slot({ inspectorId: 'p1', time: '13:20' }), day2.concat(day.slice(2)), rules(), nameOf);
     expect(cs.map((c) => c.rule).sort()).toEqual(['maxPerDay', 'maxPerInspector', 'maxPerVendor', 'sameSlot']);
   });
 });
@@ -139,6 +145,16 @@ describe('가져오기 충돌 경고', () => {
     parsed: { id: '', vendorName: '새업체', category: '', itemName: '', spec: '', quantity: 1, requestedDate: '2026-12-01', requestedTime: '17:00', location: 'B', contactName: '', contactPhone: '', contactEmail: '', note: '', ...over },
   });
 
+  it('검수 신청 내역에서 같은 업체·같은 장소·같은 시간대 여러 행은 충돌 경고 없음', () => {
+    const m = importConflicts([row(3), row(4, { requestedTime: '17:00' })], [], settings, []);
+    expect(m.size).toBe(0);
+    // 3행이면 '같은 업체 하루 최대 2건'에는 걸리지만 시간대·장소 중복 경고는 없음
+    const m3 = importConflicts([row(3), row(4, { requestedTime: '17:00' }), row(5, { requestedTime: '17:15' })], [], settings, []);
+    const all = [...m3.values()].flatMap((v) => v.requestedDate ?? []).map((i) => i.message);
+    expect(all.some((x) => x.includes('같은 시간대·같은 장소'))).toBe(false);
+    expect(all.some((x) => x.includes('같은 업체 하루 최대 2건 초과'))).toBe(true);
+  });
+
   it('기존 일정과 합쳐 하루 최대를 넘으면 희망일 칸에 경고 (막지 않음)', () => {
     const m = importConflicts([row(3), row(4, { requestedDate: '2026-12-02' })], existing, settings, []);
     expect(m.get('0:3')?.requestedDate?.[0]).toEqual({ level: 'warn', message: '충돌: 하루 최대 검수 건수(3건) 초과 — 12-01(화) 4건 — 가져온 뒤 일정 조정 필요' });
@@ -146,7 +162,7 @@ describe('가져오기 충돌 경고', () => {
   });
 
   it('가져오는 행끼리도 검사하고, 오류 행은 셈에서 뺀다', () => {
-    const m = importConflicts([row(3, { requestedDate: '2026-12-05', time: undefined } as any), row(4, { requestedDate: '2026-12-05', location: 'B', requestedTime: '17:20' }), row(5, { requestedDate: '2026-12-05' }, 'error')], [], settings, []);
+    const m = importConflicts([row(3, { requestedDate: '2026-12-05', time: undefined } as any), row(4, { requestedDate: '2026-12-05', location: 'B', requestedTime: '17:20', vendorName: '다른업체' }), row(5, { requestedDate: '2026-12-05' }, 'error')], [], settings, []);
     expect(m.get('0:4')?.requestedDate?.map((i) => i.message)).toEqual([
       '충돌: 같은 시간대·같은 장소 중복 — 12-05(토) B 17:00(a.xlsx 3행) / 17:20(a.xlsx 4행) — 가져온 뒤 일정 조정 필요',
     ]);

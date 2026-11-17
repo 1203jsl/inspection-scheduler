@@ -99,6 +99,8 @@ export function dayConflicts(date: string, slots: Slot[], r: ConflictRules, name
       for (let a = 0; a < timed.length; a++) {
         for (let b = a + 1; b < timed.length && timed[b].m! - timed[a].m! < r.sameSlot.minutes; b++) {
           const x = timed[a].s, y = timed[b].s;
+          // 같은 업체가 같은 장소에 여러 품목을 한꺼번에 가져오는 경우는 충돌이 아님
+          if (x.vendorName && x.vendorName === y.vendorName) continue;
           out.push({ rule: 'sameSlot', date, ids: [x.id, y.id], message: `같은 시간대·같은 장소 중복 — ${md} ${loc} ${x.time}(${x.id}) / ${y.time}(${y.id})` });
         }
       }
