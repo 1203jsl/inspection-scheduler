@@ -38,7 +38,7 @@ export function matchInspectors(user: Pick<CurrentUser, 'account' | 'displayName
 }
 
 export function reminderLine(i: Inspection): string {
-  return `- ${fmtMD(i.schedule.date)} ${i.schedule.time ?? ''} · ${i.vendorName} · ${i.itemName} · ${i.schedule.location || '장소 미정'} (${i.id})${i.status === 'changed' ? ' [변경됨·재확정 필요]' : ''}`;
+  return `- ${fmtMD(i.schedule.date)} ${i.schedule.time ?? ''} · ${i.vendorName}${i.projectName ? ` · ${i.projectName}` : ''} · ${i.itemName} · ${i.schedule.location || '장소 미정'} (${i.id})${i.status === 'changed' ? ' [변경됨·재확정 필요]' : ''}`;
 }
 
 export function reminderVars(p: Inspector, items: Inspection[], today: string, days: number): Record<string, string> {
@@ -122,7 +122,7 @@ export function deadlineLabel(n: ResultNotice): string {
 
 export function resultLine(i: Inspection, n: ResultNotice): string {
   const what = n.stage === 'noResult' ? '결과 미입력' : `결과 입력됨(${i.result?.verdict === 'fail' ? '불합격' : '합격'}) · 통보 메일 미발송`;
-  return `- ${i.vendorName} · ${i.itemName} (${i.id}) · 검수일 ${fmtMD(n.inspected)} · ${deadlineLabel(n)} · ${what}`;
+  return `- ${i.vendorName}${i.projectName ? ` · ${i.projectName}` : ''} · ${i.itemName} (${i.id}) · 검수일 ${fmtMD(n.inspected)} · ${deadlineLabel(n)} · ${what}`;
 }
 
 /** 검수자별 결과 통보 대기 건 (기한 임박·초과 순) */

@@ -1,6 +1,6 @@
 import type { DataFileKey, DataFiles, ExcelTemplateDef, FileMeta, Settings } from '../../shared/types';
 import { DEFAULT_CONFLICT_RULES } from '../../shared/conflicts';
-import { DEFAULT_MAIL_SETTINGS, DEFAULT_TEMPLATES, OLD_CONFIRMED_TEMPLATE } from '../../shared/mail';
+import { DEFAULT_MAIL_SETTINGS, DEFAULT_TEMPLATES, OLD_CONFIRMED_TEMPLATE, V9_TEMPLATES } from '../../shared/mail';
 import { DEFAULT_NOTIFY, DEFAULT_REMINDER_TEMPLATE, DEFAULT_RESULT_REMINDER_TEMPLATE } from '../../shared/reminders';
 import { AppError } from './errors';
 
@@ -9,7 +9,7 @@ export const CURRENT_SCHEMA: Record<DataFileKey, number> = {
   inspections: 3,
   vendors: 1,
   inspectors: 1,
-  settings: 9,
+  settings: 10,
   mail_log: 1,
 };
 
@@ -144,6 +144,16 @@ export const MIGRATIONS: Partial<Record<DataFileKey, Record<number, Migration>>>
     8: (d) => {
       const list = (d.excelTemplates ?? [TEMPLATE_V1]).filter((t: ExcelTemplateDef) => t.version !== 'v2');
       return { ...d, schemaVersion: 9, excelTemplates: [...list, TEMPLATE_V2], currentTemplate: 'v2' };
+    },
+    // v9 → v10: 기본 메일 템플릿에 {프로젝트명} 추가. 사용자가 고친 템플릿은 그대로 둠
+    9: (d) => {
+      const cur = d.mailTemplates ?? {};
+      const next: any = { ...cur };
+      for (const k of Object.keys(V9_TEMPLATES) as (keyof typeof V9_TEMPLATES)[]) {
+        const t = cur[k];
+        if (t && t.subject === V9_TEMPLATES[k].subject && t.body === V9_TEMPLATES[k].body) next[k] = { ...DEFAULT_TEMPLATES[k] };
+      }
+      return { ...d, schemaVersion: 10, mailTemplates: next };
     },
   },
 };

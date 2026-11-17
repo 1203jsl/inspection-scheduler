@@ -23,7 +23,8 @@ export const OLD_CONFIRMED_TEMPLATE: MailTemplate = {
   body: '{담당자명} 님께,\n\n신청번호 {신청번호} ({품명}) 검수 일정이 아래와 같이 확정되었습니다.\n\n- 검수 일시: {검수일} {검수시간}\n- 검수 장소: {검수장소}\n- 검수 수량: {수량}\n- 담당 검수자: {검수자}\n\n일정에 맞춰 준비 부탁드립니다.' + SIGN,
 };
 
-export const DEFAULT_TEMPLATES: Record<MailKind, MailTemplate> = {
+/** 프로젝트명 추가 전(설정 v9까지)의 기본 템플릿. 사용자가 고치지 않았으면 새 기본값으로 바꾸기 위해 보관 */
+export const V9_TEMPLATES: Record<MailKind, MailTemplate> = {
   registered: {
     subject: '[검수 신청 접수] {신청번호} {품명} ({업체명})',
     body: '{담당자명} 님께,\n\n요청하신 검수 신청이 접수되었습니다.\n\n{목록}\n\n일정은 협의 후 확정되면 다시 안내드리겠습니다.' + SIGN,
@@ -50,6 +51,33 @@ export const DEFAULT_TEMPLATES: Record<MailKind, MailTemplate> = {
   },
 };
 
+export const DEFAULT_TEMPLATES: Record<MailKind, MailTemplate> = {
+  registered: {
+    subject: '[검수 신청 접수] {신청번호} {품명} ({업체명})',
+    body: '{담당자명} 님께,\n\n요청하신 검수 신청이 접수되었습니다.\n\n{목록}\n\n일정은 협의 후 확정되면 다시 안내드리겠습니다.' + SIGN,
+  },
+  confirmed: {
+    subject: '[검수 일정 확정 안내] {업체명} {건수}건 ({확정일})',
+    body: '{담당자명} 님께,\n\n요청하신 검수 신청 {건수}건의 일정이 아래와 같이 확정되어 안내드립니다.\n\n{목록}\n\n일정에 맞춰 준비 부탁드립니다.\n내용을 수정하실 때는 엑셀의 [신청번호] 칸에 위 신청번호를 적어 회신해 주세요.' + SIGN,
+  },
+  changed: {
+    subject: '[검수 일정 변경 안내] {신청번호} {품명} ({업체명})',
+    body: '{담당자명} 님께,\n\n신청번호 {신청번호} ({품명}) 검수 일정이 아래와 같이 변경되었습니다.\n\n- 프로젝트명: {프로젝트명}\n- 변경 일시: {검수일} {검수시간}\n- 검수 장소: {검수장소}\n- 변경 사유: {변경사유}\n\n확정되면 다시 안내드리겠습니다.' + SIGN,
+  },
+  canceled: {
+    subject: '[검수 취소 안내] {신청번호} {품명} ({업체명})',
+    body: '{담당자명} 님께,\n\n신청번호 {신청번호} ({품명}) 검수가 취소되었습니다.\n\n- 프로젝트명: {프로젝트명}\n- 취소 사유: {취소사유}\n\n문의 사항이 있으시면 회신 부탁드립니다.' + SIGN,
+  },
+  pass: {
+    subject: '[검수 결과 안내 - 합격] {신청번호} {품명} ({업체명})',
+    body: '{담당자명} 님께,\n\n신청번호 {신청번호} ({품명}) 검수 결과를 알려드립니다.\n\n- 프로젝트명: {프로젝트명}\n- 검수일: {검수일}\n- 결과: {결과}\n\n수고하셨습니다.' + SIGN,
+  },
+  fail: {
+    subject: '[검수 결과 안내 - 불합격] {신청번호} {품명} ({업체명})',
+    body: '{담당자명} 님께,\n\n신청번호 {신청번호} ({품명}) 검수 결과를 알려드립니다.\n\n- 프로젝트명: {프로젝트명}\n- 검수일: {검수일}\n- 결과: {결과}\n- 불합격 사유: {불합격사유}\n\n시정 조치 후 재검수 일정을 협의해 주시기 바랍니다.' + SIGN,
+  },
+};
+
 /** 설정 화면에 보여줄 치환값 (같은 뜻의 다른 이름도 받아 줌) */
 export const PLACEHOLDERS = [
   '{업체명}', '{프로젝트명}', '{신청번호}', '{품명}', '{품번}', '{수량}', '{검수품목}', '{희망일}', '{희망시간}',
@@ -66,7 +94,7 @@ const dash = (v: unknown) => (v === null || v === undefined || v === '' ? '-' : 
 
 /** {목록}의 한 건 (확정·변경은 일정까지) */
 export function itemLine(i: Inspection, kind: MailKind, inspectorName: (id: string | null) => string): string {
-  const head = `- ${i.id}${i.projectName ? ` · [${i.projectName}]` : ''} · ${dash(i.itemName)}${i.spec ? ` (${i.spec})` : ''} · 수량 ${dash(i.quantity)}`;
+  const head = `- ${i.id}${i.projectName ? ` · 프로젝트: ${i.projectName}` : ''} · ${dash(i.itemName)}${i.spec ? ` (${i.spec})` : ''} · 수량 ${dash(i.quantity)}`;
   if (kind === 'confirmed' || kind === 'changed') {
     const who = inspectorName(i.schedule.inspectorId);
     return `${head}\n  검수 일시: ${dash(fmtYMD(i.schedule.date))} ${i.schedule.time ?? ''} · 장소: ${dash(i.schedule.location)}${who ? ` · 검수자: ${who}` : ''}`;

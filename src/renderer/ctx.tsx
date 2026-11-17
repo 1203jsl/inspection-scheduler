@@ -15,6 +15,8 @@ export interface ListPreset {
   q?: string;
   status?: InspectionStatus | '';
   vendor?: string;
+  project?: string;
+  category?: string;
   inspectorId?: string;
   /** 특정 날짜 (달력에서 빈 날짜를 눌렀을 때) */
   day?: string;

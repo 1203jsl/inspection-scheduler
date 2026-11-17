@@ -35,6 +35,8 @@ export function ListPage({ preset }: { preset?: ListPreset }) {
   const [period, setPeriod] = useState<Period>(preset?.day ? 'day' : preset?.period ?? '');
   const [day] = useState(preset?.day ?? '');
   const [vendor, setVendor] = useState(preset?.vendor ?? '');
+  const [project, setProject] = useState(preset?.project ?? '');
+  const [category, setCategory] = useState(preset?.category ?? '');
   const [insp, setInsp] = useState(preset?.unassigned ? '__none' : preset?.inspectorId ?? '');
   const [status, setStatus] = useState<string>(preset?.status ?? '');
   const [result, setResult] = useState(preset?.result ?? '');
@@ -60,6 +62,9 @@ export function ListPage({ preset }: { preset?: ListPreset }) {
   }, [period, today, day]);
 
   const vendors = useMemo(() => [...new Set(items.map((i) => i.vendorName).filter(Boolean))].sort(), [items]);
+  const projects = useMemo(() => [...new Set(items.map((i) => i.projectName).filter(Boolean))].sort((a, b) => a.localeCompare(b, 'ko')), [items]);
+  // 검수 품목: 설정 목록 순서 + 실제 건에만 있는 품목
+  const categories = useMemo(() => [...new Set([...(data.settings.inspectionItems ?? []), ...items.map((i) => i.category).filter(Boolean)])], [items, data.settings.inspectionItems]);
   const rules = data.settings.conflictRules;
   const cmap = useMemo(() => conflictMap(items.map(toSlot), rules, inspectorName), [items, rules, inspectorName]);
   const conflictOf = (i: Inspection) => (i.schedule.date ? (cmap.get(i.schedule.date) ?? []).filter((c) => c.ids.includes(i.id)).map((c) => c.message) : []);
@@ -70,6 +75,8 @@ export function ListPage({ preset }: { preset?: ListPreset }) {
       if (kw && ![i.id, i.vendorName, i.projectName, i.itemName, i.spec, i.category].some((s) => (s ?? '').toLowerCase().includes(kw))) return false;
       if (range && (!i.schedule.date || i.schedule.date < range[0] || i.schedule.date > range[1])) return false;
       if (vendor && i.vendorName !== vendor) return false;
+      if (project && (project === '__none' ? !!i.projectName : i.projectName !== project)) return false;
+      if (category && i.category !== category) return false;
       if (insp === '__none' ? !!i.schedule.inspectorId || ['done', 'canceled'].includes(i.status) : insp && i.schedule.inspectorId !== insp) return false;
       if (status && i.status !== status) return false;
       if (result === 'pass' && i.result?.verdict !== 'pass') return false;
@@ -94,7 +101,7 @@ export function ListPage({ preset }: { preset?: ListPreset }) {
       const c = typeof x === 'number' && typeof y === 'number' ? x - y : String(x).localeCompare(String(y), 'ko');
       return (c || a.id.localeCompare(b.id)) * sort.dir;
     });
-  }, [items, q, range, vendor, insp, status, result, sort, today, inspectorName]);
+  }, [items, q, range, vendor, project, category, insp, status, result, sort, today, inspectorName]);
 
   const pages = Math.max(1, Math.ceil(rows.length / PAGE));
   const cur = Math.min(page, pages - 1);
@@ -102,7 +109,7 @@ export function ListPage({ preset }: { preset?: ListPreset }) {
   const selected = items.filter((i) => sel.has(i.id));
 
   const reset = () => {
-    setQ(''); setPeriod(''); setVendor(''); setInsp(''); setStatus(''); setResult(''); setPage(0);
+    setQ(''); setPeriod(''); setVendor(''); setProject(''); setCategory(''); setInsp(''); setStatus(''); setResult(''); setPage(0);
   };
   const sortBy = (key: SortKey) => setSort((s) => ({ key, dir: s.key === key ? (s.dir === 1 ? -1 : 1) : 1 }));
   const Th = ({ k, children, num }: { k: SortKey; children: string; num?: boolean }) => (
@@ -175,6 +182,15 @@ export function ListPage({ preset }: { preset?: ListPreset }) {
           <option value="">업체: 전체</option>
           {vendors.map((v) => <option key={v}>{v}</option>)}
         </select>
+        <select className="sel" style={{ width: 150 }} aria-label="프로젝트" value={project} onChange={(e) => { setProject(e.target.value); setPage(0); }}>
+          <option value="">프로젝트: 전체</option>
+          <option value="__none">(프로젝트 없음)</option>
+          {projects.map((v) => <option key={v}>{v}</option>)}
+        </select>
+        <select className="sel" style={{ width: 140 }} aria-label="검수 품목" value={category} onChange={(e) => { setCategory(e.target.value); setPage(0); }}>
+          <option value="">검수 품목: 전체</option>
+          {categories.map((v) => <option key={v}>{v}</option>)}
+        </select>
         <select className="sel" style={{ width: 128 }} aria-label="검수자" value={insp} onChange={(e) => { setInsp(e.target.value); setPage(0); }}>
           <option value="">검수자: 전체</option>
           <option value="__none">(미배정)</option>
@@ -195,7 +211,7 @@ export function ListPage({ preset }: { preset?: ListPreset }) {
         <button className="btn" type="button" disabled={rows.length === 0} onClick={async () => {
           setExportMsg(null);
           const sel = (id: string, label: string) => (document.querySelector(`select[aria-label="${id}"]`) as HTMLSelectElement | null)?.selectedOptions[0]?.text ?? label;
-          const filter = [q.trim() && `검색: ${q.trim()}`, period && sel('기간', ''), vendor && `업체: ${vendor}`, insp && sel('검수자', ''), status && sel('상태', ''), result && sel('결과', '')]
+          const filter = [q.trim() && `검색: ${q.trim()}`, period && sel('기간', ''), vendor && `업체: ${vendor}`, project && `프로젝트: ${project === '__none' ? '(없음)' : project}`, category && `검수 품목: ${category}`, insp && sel('검수자', ''), status && sel('상태', ''), result && sel('결과', '')]
             .filter(Boolean).join(' · ');
           const r = await api.exportList(rows.map((i) => i.id), filter);
           if (!r.ok) setExportMsg({ ok: false, text: r.error.message });

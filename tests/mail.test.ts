@@ -5,7 +5,7 @@ import path from 'node:path';
 import type { AddressInfo } from 'node:net';
 import { SMTPServer } from 'smtp-server';
 import type { Inspection, MailDraft } from '../src/shared/types';
-import { DEFAULT_TEMPLATES, fillTemplate, mailGroup, mailVars, OLD_CONFIRMED_TEMPLATE, parseAddresses, pendingMail, recipientsFor } from '../src/shared/mail';
+import { DEFAULT_TEMPLATES, V9_TEMPLATES, fillTemplate, mailGroup, mailVars, OLD_CONFIRMED_TEMPLATE, parseAddresses, pendingMail, recipientsFor } from '../src/shared/mail';
 import { DataStore } from '../src/main/core/dataStore';
 import { AppError } from '../src/main/core/errors';
 import { appendMailLog, logEntry } from '../src/main/core/mailer';
@@ -301,5 +301,24 @@ describe('설정 구조 변환 v6', () => {
     const mine = { subject: '내가 고친 제목', body: '내 본문' };
     const b = migrate('settings', { ...base, mailTemplates: { ...DEFAULT_TEMPLATES, confirmed: mine } } as any);
     expect(b.mailTemplates.confirmed).toEqual(mine);
+  });
+});
+
+describe('프로젝트명', () => {
+  it('기본 템플릿에 프로젝트명이 들어간다 ({목록}에는 건마다)', () => {
+    const a = insp({ projectName: 'P-2611 CVD 챔버', status: 'canceled' });
+    const v = mailVars(a, nameOf, '홍길동', 'canceled');
+    expect(fillTemplate(DEFAULT_TEMPLATES.canceled.body, v).text).toContain('- 프로젝트명: P-2611 CVD 챔버');
+    const c = mailVars(insp({ projectName: 'P-2611 CVD 챔버' }), nameOf, '홍길동', 'confirmed');
+    expect(c.목록).toContain('프로젝트: P-2611 CVD 챔버');
+    for (const k of ['changed', 'canceled', 'pass', 'fail'] as const) expect(DEFAULT_TEMPLATES[k].body).toContain('{프로젝트명}');
+  });
+  it('설정 v9 → v10: 고치지 않은 기본 템플릿만 새 기본값으로, 고친 것은 그대로', () => {
+    const edited = { subject: '내 제목', body: '내 본문' };
+    const v9 = { schemaVersion: 9, revision: 1, mailTemplates: { ...structuredClone(V9_TEMPLATES), pass: edited } };
+    const v10 = migrate('settings', v9);
+    expect(v10.mailTemplates.fail).toEqual(DEFAULT_TEMPLATES.fail);
+    expect(v10.mailTemplates.canceled).toEqual(DEFAULT_TEMPLATES.canceled);
+    expect(v10.mailTemplates.pass).toEqual(edited);
   });
 });
