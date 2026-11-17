@@ -431,6 +431,7 @@ export type AppErrorCode =
   | 'FILE_CORRUPT'    // JSON이 깨짐
   | 'NEWER_SCHEMA'    // 더 새 버전 프로그램이 저장한 데이터
   | 'NOT_INITIALIZED' // 데이터 폴더 구조가 없음
+  | 'NO_PERMISSION'   // 폴더에 파일을 만들 권한이 없음 (보안·문서중앙화 정책 등)
   | 'UNKNOWN';
 
 export interface AppErrorInfo {

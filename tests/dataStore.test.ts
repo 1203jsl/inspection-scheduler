@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { promises as fs } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { DataStore } from '../src/main/core/dataStore';
+import { DataStore, WRITE_LOCK } from '../src/main/core/dataStore';
 import { AppError } from '../src/main/core/errors';
 import { CURRENT_SCHEMA } from '../src/main/core/schema';
 
@@ -129,11 +129,11 @@ describe('덮어쓰기 방지', () => {
       expect((rej.reason as AppError).code).toBe('CONFLICT');
     }
     const files = await fs.readdir(path.join(dir, 'data'));
-    expect(files).not.toContain('.writing'); // 잠금은 끝나면 지워짐
+    expect(files).not.toContain(WRITE_LOCK); // 잠금은 끝나면 지워짐
   });
 
   it('멈춘 PC가 남긴 오래된 저장 잠금은 무시하고 저장한다', async () => {
-    const lock = path.join(dir, 'data', '.writing');
+    const lock = path.join(dir, 'data', WRITE_LOCK);
     await fs.writeFile(lock, '{}');
     const old = new Date(Date.now() - 60_000);
     await fs.utimes(lock, old, old);
@@ -152,7 +152,7 @@ describe('덮어쓰기 방지', () => {
     const v = await kim.load('vendors');
     await kim.save({ vendors: v });
     const files = await fs.readdir(path.join(dir, 'data'));
-    expect(files.filter((f) => f.endsWith('.tmp'))).toEqual([]);
+    expect(files.filter((f) => f.includes('.saving-') || f.endsWith('.tmp') || f.startsWith('.'))).toEqual([]);
   });
 });
 

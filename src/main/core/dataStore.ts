@@ -2,15 +2,15 @@ import { promises as fs } from 'node:fs';
 import path from 'node:path';
 import type { BackupEntry, DataFileKey, DataFiles, FileMeta, FolderCheck } from '../../shared/types';
 import { DATA_FILE_KEYS } from '../../shared/types';
-import { AppError, conflictError, folderMissing } from './errors';
+import { AppError, conflictError, folderMissing, isPermError, noPermission } from './errors';
 import { exists, isDir, readText, writeFileAtomic } from './fsSafe';
 import { defaultFile, migrate } from './schema';
 
 /** 데이터 폴더 안의 하위 폴더 이름 */
 export const DIRS = { data: 'data', original: '원본', attach: '첨부', backup: '백업' } as const;
-export const LOCK_FILE = '.lock';
+export const LOCK_FILE = 'editing-lock.json';
 /** 저장 잠금 파일 (data/ 안, 저장하는 동안만 존재) */
-export const WRITE_LOCK = '.writing';
+export const WRITE_LOCK = 'saving-lock.json';
 const WRITE_LOCK_WAIT_MS = 5_000;
 const WRITE_LOCK_STALE_MS = 15_000;
 
@@ -183,6 +183,7 @@ export class DataStore {
       } catch (e) {
         const code = (e as NodeJS.ErrnoException).code;
         if (code === 'ENOENT') throw folderMissing(this.root);
+        if (isPermError(e)) throw noPermission(lock);
         if (code !== 'EEXIST') throw e;
         const st = await fs.stat(lock).catch(() => null);
         if (st && Date.now() - st.mtimeMs > WRITE_LOCK_STALE_MS) {
