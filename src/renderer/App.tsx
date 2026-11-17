@@ -14,7 +14,7 @@ import { InspectorsPage, VendorsPage } from './PeoplePages';
 import { SettingsPage } from './SettingsPage';
 import { DashboardPage } from './DashboardPage';
 import { ReminderPopup, ReminderPreview } from './Reminders';
-import { DEFAULT_NOTIFY, matchInspectors, upcoming } from '../shared/reminders';
+import { DEFAULT_NOTIFY, matchInspectors, resultNotice, upcoming, type ResultNotice } from '../shared/reminders';
 import type { MailDraft } from '../shared/types';
 import type { ReminderRun } from './api';
 
@@ -42,7 +42,7 @@ export function App() {
   const [search, setSearch] = useState('');
   const [today, setToday] = useState(ymd(new Date()));
   // 검수자 알림: 팝업·메일은 하루에 한 번 (프로그램 실행 시, 실행 중 날짜가 바뀔 때)
-  const [popup, setPopup] = useState<{ items: Inspection[]; who: string } | null>(null);
+  const [popup, setPopup] = useState<{ items: Inspection[]; results: { i: Inspection; n: ResultNotice }[]; who: string } | null>(null);
   const [drafts, setDrafts] = useState<MailDraft[] | null>(null);
   const [remindMsg, setRemindMsg] = useState<{ ok: boolean; text: string } | null>(null);
   const popupDay = useRef('');
@@ -89,7 +89,12 @@ export function App() {
       if (notify.popup && mine.length) {
         const ids = new Set(mine.map((p) => p.id));
         const list = upcoming(data.inspections.items, today, notify.daysBefore).filter((i) => ids.has(i.schedule.inspectorId ?? ''));
-        if (list.length) setPopup({ items: list, who: mine.map((p) => p.name).join(', ') });
+        // 결과 통보 기한 (검수일 다음날부터 N일): 이 사람이 맡은 건 중 업체에 결과 통보가 안 된 건
+        const results = notify.resultAlert === false ? [] : data.inspections.items
+          .map((i) => ({ i, n: resultNotice(i, data.mail_log.items, today, notify.resultDays ?? 7) }))
+          .filter((x): x is { i: Inspection; n: ResultNotice } => !!x.n && ids.has(x.n.inspectorId ?? ''))
+          .sort((a, b) => a.n.daysLeft - b.n.daysLeft);
+        if (list.length || results.length) setPopup({ items: list, results, who: mine.map((p) => p.name).join(', ') });
       }
     }
     if (mailDay.current !== today) {
@@ -275,10 +280,11 @@ export function App() {
         </div>
       </div>
       {popup && !conflict && (
-        <ReminderPopup items={popup.items} today={today} who={popup.who} onClose={() => setPopup(null)}
+        <ReminderPopup items={popup.items} results={popup.results} today={today} who={popup.who} onClose={() => setPopup(null)}
           onOpen={(i) => {
             setPopup(null);
             if (i) go({ page: 'detail', id: i.id, from: { page: 'dashboard' } });
+            else if (popup.results.length) go({ page: 'dashboard' });
             else go({ page: 'calendar', date: popup.items[0].schedule.date ?? undefined });
           }} />
       )}

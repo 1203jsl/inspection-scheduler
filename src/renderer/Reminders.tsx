@@ -2,13 +2,15 @@ import { useState } from 'react';
 import type { Inspection, MailDraft } from '../shared/types';
 import { fmtMD, parseYmd } from '../shared/dates';
 import { api, type ReminderRun } from './api';
+import type { ResultNotice } from '../shared/reminders';
 import { Alert, Dialog, Icon } from './components';
 
 const dayDiff = (from: string, to: string) => Math.round((parseYmd(to).getTime() - parseYmd(from).getTime()) / 86_400_000);
 
 /** 프로그램 시작·날짜가 바뀔 때 뜨는 다가오는 검수 팝업 (디자인 Dialog '프로그램 시작 알림') */
-export function ReminderPopup({ items, today, who, onClose, onOpen }: {
+export function ReminderPopup({ items, results, today, who, onClose, onOpen }: {
   items: Inspection[];
+  results: { i: Inspection; n: ResultNotice }[];
   today: string;
   who: string;
   onClose: () => void;
@@ -16,18 +18,23 @@ export function ReminderPopup({ items, today, who, onClose, onOpen }: {
 }) {
   const allTomorrow = items.every((i) => dayDiff(today, i.schedule.date!) === 1);
   const allToday = items.every((i) => i.schedule.date === today);
-  const title = allToday ? `오늘 검수 예정 ${items.length}건` : allTomorrow ? `내일 검수 예정 ${items.length}건` : `다가오는 검수 ${items.length}건`;
+  const over = results.filter((x) => x.n.daysLeft < 0).length;
+  const title = items.length === 0
+    ? `결과 통보 대기 ${results.length}건${over ? ` (기한 초과 ${over}건)` : ''}`
+    : allToday ? `오늘 검수 예정 ${items.length}건` : allTomorrow ? `내일 검수 예정 ${items.length}건` : `다가오는 검수 ${items.length}건`;
+  const single = items.length + results.length === 1 ? (items[0] ?? results[0].i) : null;
   return (
     <Dialog
       title={title}
-      icon={<Icon name="calendar" lg />}
+      icon={<Icon name={items.length ? 'calendar' : 'clock'} lg />}
       width={520}
       footer={<>
         <button className="btn" type="button" onClick={onClose} autoFocus>닫기</button>
-        <button className="btn btn-primary" type="button" onClick={() => onOpen(items.length === 1 ? items[0] : null)}>상세 보기</button>
+        <button className="btn btn-primary" type="button" onClick={() => onOpen(single)}>상세 보기</button>
       </>}
     >
       <span className="help">{who} 님에게 배정된 검수입니다.</span>
+      {items.length > 0 && results.length > 0 && <div className="lbl">다가오는 검수 {items.length}건</div>}
       {items.map((i) => {
         const d = dayDiff(today, i.schedule.date!);
         return (
@@ -41,6 +48,24 @@ export function ReminderPopup({ items, today, who, onClose, onOpen }: {
           </div>
         );
       })}
+      {results.length > 0 && (
+        <>
+          <div className="lbl" style={{ marginTop: items.length ? 8 : 0 }}>
+            결과 통보가 필요한 검수 {results.length}건 <span className="help" style={{ fontWeight: 400 }}>검수일 다음날부터 기한 안에 업체에 결과를 통보하세요</span>
+          </div>
+          {results.map(({ i, n }) => (
+            <div key={i.id} className="list-i">
+              <span className={`tag ${n.daysLeft < 0 ? 'tag-err' : n.daysLeft <= 1 ? 'tag-mod' : ''}`} style={{ minWidth: 64, justifyContent: 'center' }}>
+                {n.daysLeft > 0 ? `${n.daysLeft}일 남음` : n.daysLeft === 0 ? '오늘까지' : `${-n.daysLeft}일 초과`}
+              </span>
+              <span>
+                <b>{i.vendorName}</b> · {i.itemName}
+                <span className="muted"> · 검수일 {fmtMD(n.inspected)} · 기한 {fmtMD(n.deadline)} · {n.stage === 'noResult' ? '결과 미입력' : '통보 메일 미발송'}</span>
+              </span>
+            </div>
+          ))}
+        </>
+      )}
     </Dialog>
   );
 }

@@ -1,6 +1,8 @@
 import type { MailDraft, MailLogEntry } from '../../shared/types';
 import { fillTemplate } from '../../shared/mail';
-import { DEFAULT_NOTIFY, DEFAULT_REMINDER_TEMPLATE, reminderHandled, reminderTargets, reminderVars } from '../../shared/reminders';
+import {
+  DEFAULT_NOTIFY, DEFAULT_REMINDER_TEMPLATE, DEFAULT_RESULT_REMINDER_TEMPLATE, reminderHandled, reminderTargets, reminderVars, resultTargets, resultVars,
+} from '../../shared/reminders';
 import { ymd } from '../../shared/dates';
 import { DataStore } from './dataStore';
 import { AppError } from './errors';
@@ -29,14 +31,36 @@ export class ReminderService {
     private now: () => Date = () => new Date(),
   ) {}
 
-  /** 오늘 보낼 알림 메일 초안 (이미 보낸 검수자는 뺌) */
+  /**
+   * 오늘 보낼 알림 메일 초안 (이미 보낸 검수자는 뺌)
+   * - 검수 알림: 다가오는 배정 검수
+   * - 결과 통보 요청: 검수일이 지났는데 업체에 결과 통보가 안 된 건 (기한·남은 날 포함)
+   */
   async drafts(): Promise<MailDraft[]> {
     const settings = await this.store.load('settings');
     const [insp, people, log] = [await this.store.load('inspections'), await this.store.load('inspectors'), await this.store.load('mail_log')];
     const notify = settings.notify ?? DEFAULT_NOTIFY;
     const tpl = settings.reminderTemplate ?? DEFAULT_REMINDER_TEMPLATE;
     const today = ymd(this.now());
-    return reminderTargets(insp.items, people.items, today, notify.daysBefore)
+    const results: MailDraft[] = !(notify.resultAlert ?? true) ? [] : resultTargets(insp.items, people.items, log.items, today, notify.resultDays ?? 7)
+      .filter((t) => !reminderHandled(log.items, today, t.inspector.id, this.now(), 'resultReminder'))
+      .map((t) => {
+        const rtpl = settings.resultReminderTemplate ?? DEFAULT_RESULT_REMINDER_TEMPLATE;
+        const vars = resultVars(t.inspector, t.items, notify.resultDays ?? 7);
+        return {
+          inspectionId: null,
+          inspectionIds: t.items.map((x) => x.i.id),
+          kind: 'resultReminder' as const,
+          to: t.inspector.email,
+          cc: '',
+          subject: fillTemplate(rtpl.subject, vars).text,
+          body: fillTemplate(rtpl.body, vars).text,
+          attachments: [],
+          reminderDate: today,
+          inspectorId: t.inspector.id,
+        };
+      });
+    const upcomingDrafts: MailDraft[] = reminderTargets(insp.items, people.items, today, notify.daysBefore)
       .filter((t) => !reminderHandled(log.items, today, t.inspector.id, this.now()))
       .map((t) => {
         const vars = reminderVars(t.inspector, t.items, today, notify.daysBefore);
@@ -53,6 +77,7 @@ export class ReminderService {
           inspectorId: t.inspector.id,
         };
       });
+    return [...upcomingDrafts, ...results];
   }
 
   /** 프로그램을 열 때(그리고 날짜가 바뀔 때) 호출 */
@@ -110,7 +135,8 @@ export class ReminderService {
     const u = this.user();
     for (let n = 1; ; n++) {
       const log = await this.store.load('mail_log');
-      const mine = drafts.filter((d) => d.reminderDate && d.inspectorId && !reminderHandled(log.items, d.reminderDate, d.inspectorId, this.now()));
+      const mine = drafts.filter((d) => d.reminderDate && d.inspectorId
+        && !reminderHandled(log.items, d.reminderDate, d.inspectorId, this.now(), d.kind === 'resultReminder' ? 'resultReminder' : 'reminder'));
       if (mine.length === 0) return [];
       const claims: MailLogEntry[] = mine.map((d) => logEntry(d, u, 'smtp', 'claimed', this.now()));
       try {

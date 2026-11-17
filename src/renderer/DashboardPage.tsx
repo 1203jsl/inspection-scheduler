@@ -4,8 +4,7 @@ import { MAIL_KIND_LABEL } from '../shared/types';
 import { addDays, fmtMD, monthEnd, monthStart, parseYmd, weekStart } from '../shared/dates';
 import { conflictMap, toSlot } from '../shared/conflicts';
 import { pendingMail } from '../shared/mail';
-import { upcoming } from '../shared/reminders';
-import { resultMissing } from '../shared/workflow';
+import { DEFAULT_NOTIFY, deadlineLabel, resultNotice, upcoming, type ResultNotice } from '../shared/reminders';
 import { Icon, type IconName } from './components';
 import { useApp, type ListPreset } from './ctx';
 
@@ -42,9 +41,16 @@ export function DashboardPage() {
     .filter((i) => i.status === 'negotiating')
     .map((i) => ({ i, days: dayDiff(statusSince(i)?.slice(0, 10) ?? today, today) }))
     .filter((x) => x.days >= NEGO_LATE_DAYS);
-  const noResult = items.filter((i) => resultMissing(i, today));
-  const unsent = items.map((i) => ({ i, kind: pendingMail(i, log) })).filter((x) => x.kind);
-  const todo = registered.length + negoLate.length + noResult.length + unsent.length;
+  // 결과 통보 대기: 검수일이 지났는데 업체에 결과 통보가 안 된 건 (기한 임박·초과 순)
+  const resultDays = (data.settings.notify ?? DEFAULT_NOTIFY).resultDays ?? 7;
+  const results = items
+    .map((i) => ({ i, n: resultNotice(i, log, today, resultDays) }))
+    .filter((x): x is { i: Inspection; n: ResultNotice } => !!x.n)
+    .sort((a, b) => a.n.daysLeft - b.n.daysLeft);
+  const overdue = results.filter((x) => x.n.daysLeft < 0).length;
+  // 그 밖의 미발송 메일 (결과 통보는 위에서 따로)
+  const unsent = items.map((i) => ({ i, kind: pendingMail(i, log) })).filter((x) => x.kind && x.kind !== 'pass' && x.kind !== 'fail');
+  const todo = registered.length + negoLate.length + results.length + unsent.length;
 
   const next = upcoming(items, today, 7);
 
@@ -136,8 +142,11 @@ export function DashboardPage() {
                 row={(x) => [x.i, `협의 ${x.days}일째`, <span className="badge st-negotiating">일정협의중</span>]} />
             </div>
             <div>
-              <Group title="결과 미입력" list={noResult} icon="error"
-                row={(i) => [i, `검수일 ${fmtMD(i.schedule.date)} (${dayDiff(i.schedule.date!, today)}일 경과)`, link('결과 입력', () => detail(i))]} />
+              <Group title={`결과 통보 대기 (검수 다음날부터 ${resultDays}일 안)${overdue ? ` · 기한 초과 ${overdue}` : ''}`} list={results} icon="error"
+                row={(x) => [x.i, `${deadlineLabel(x.n)} · ${x.n.stage === 'noResult' ? '결과 미입력' : '통보 메일 미발송'}`,
+                  x.n.stage === 'noResult'
+                    ? link('결과 입력', () => detail(x.i))
+                    : link('메일 보내기', () => go({ page: 'mail', id: x.i.id, from: { page: 'dashboard' } }))]} />
               <Group title="메일 미발송" list={unsent} icon="mail"
                 row={(x) => [x.i, `${MAIL_KIND_LABEL[x.kind!]} 안내`, link('메일 보내기', () => go({ page: 'mail', id: x.i.id, from: { page: 'dashboard' } }))]} />
             </div>

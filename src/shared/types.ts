@@ -312,7 +312,7 @@ export interface MailLogEntry {
   inspectionId: string | null;
   /** 한 통에 묶어 보낸 모든 신청번호 (묶음 메일) */
   inspectionIds?: string[];
-  kind: MailKind | 'test' | 'reminder';
+  kind: MailKind | 'test' | 'reminder' | 'resultReminder';
   to: string;
   cc: string;
   subject: string;
@@ -336,6 +336,10 @@ export interface NotifySettings {
   mail: boolean;
   /** 알림 메일을 보내기 전에 미리보기로 확인할지 */
   mailPreview: boolean;
+  /** 결과 통보 기한 알림 켜기 */
+  resultAlert: boolean;
+  /** 결과 통보 기한: 검수일 다음날부터 며칠 안에 업체에 결과를 알려야 하는지 */
+  resultDays: number;
 }
 
 /** 이 PC에 저장된 SMTP 계정 (비밀번호는 화면에 돌려주지 않음) */
@@ -350,7 +354,7 @@ export interface MailDraft {
   inspectionId: string | null;
   /** 한 통에 묶는 신청번호들 (없으면 inspectionId 한 건) */
   inspectionIds?: string[];
-  kind: MailKind | 'test' | 'reminder';
+  kind: MailKind | 'test' | 'reminder' | 'resultReminder';
   to: string;
   cc: string;
   subject: string;
@@ -381,6 +385,8 @@ export interface Settings extends FileMeta {
   notify: NotifySettings;
   /** 검수자 알림 메일 템플릿 */
   reminderTemplate: MailTemplate;
+  /** 결과 통보 요청(기한 알림) 메일 템플릿 */
+  resultReminderTemplate: MailTemplate;
 }
 
 export type DataFiles = {

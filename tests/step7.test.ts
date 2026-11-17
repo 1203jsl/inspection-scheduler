@@ -194,7 +194,7 @@ describe('엑셀 내보내기', () => {
 describe('설정 구조 변환 v7', () => {
   it('알림 설정 기본값: 1일 전, 팝업·메일 켜짐, 미리보기 없이', () => {
     const v = migrate('settings', { schemaVersion: 6, revision: 1, mailTemplates: {}, mail: {}, conflictRules: {} } as any);
-    expect(v.notify).toEqual({ daysBefore: 1, popup: true, mail: true, mailPreview: false });
+    expect(v.notify).toMatchObject({ daysBefore: 1, popup: true, mail: true, mailPreview: false });
     expect(v.reminderTemplate.subject).toContain('{검수자}');
   });
 });

@@ -1,7 +1,7 @@
 import type { DataFileKey, DataFiles, ExcelTemplateDef, FileMeta, Settings } from '../../shared/types';
 import { DEFAULT_CONFLICT_RULES } from '../../shared/conflicts';
 import { DEFAULT_MAIL_SETTINGS, DEFAULT_TEMPLATES, OLD_CONFIRMED_TEMPLATE } from '../../shared/mail';
-import { DEFAULT_NOTIFY, DEFAULT_REMINDER_TEMPLATE } from '../../shared/reminders';
+import { DEFAULT_NOTIFY, DEFAULT_REMINDER_TEMPLATE, DEFAULT_RESULT_REMINDER_TEMPLATE } from '../../shared/reminders';
 import { AppError } from './errors';
 
 /** 이 프로그램이 이해하는 최신 구조 버전 (파일별) */
@@ -9,7 +9,7 @@ export const CURRENT_SCHEMA: Record<DataFileKey, number> = {
   inspections: 2,
   vendors: 1,
   inspectors: 1,
-  settings: 7,
+  settings: 8,
   mail_log: 1,
 };
 
@@ -100,6 +100,13 @@ export const MIGRATIONS: Partial<Record<DataFileKey, Record<number, Migration>>>
       notify: d.notify ?? { ...DEFAULT_NOTIFY },
       reminderTemplate: d.reminderTemplate ?? { ...DEFAULT_REMINDER_TEMPLATE },
     }),
+    // v7 → v8: 결과 통보 기한 알림 (검수일 다음날부터 7일)
+    7: (d) => ({
+      ...d,
+      schemaVersion: 8,
+      notify: { resultAlert: true, resultDays: 7, ...(d.notify ?? DEFAULT_NOTIFY) },
+      resultReminderTemplate: d.resultReminderTemplate ?? { ...DEFAULT_RESULT_REMINDER_TEMPLATE },
+    }),
   },
 };
 
@@ -121,6 +128,7 @@ export function defaultSettings(user: string, name: string, now: string): Settin
     mail: structuredClone(DEFAULT_MAIL_SETTINGS),
     notify: { ...DEFAULT_NOTIFY },
     reminderTemplate: { ...DEFAULT_REMINDER_TEMPLATE },
+    resultReminderTemplate: { ...DEFAULT_RESULT_REMINDER_TEMPLATE },
   };
 }
 

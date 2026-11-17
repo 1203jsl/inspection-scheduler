@@ -2,6 +2,7 @@ import { useState } from 'react';
 import type { AppErrorInfo, HistoryEntry, Inspection, InspectionStatus, MailLogEntry } from '../shared/types';
 import { MAIL_KIND_LABEL, STATUS_LABEL } from '../shared/types';
 import { mailCovers, pendingMail } from '../shared/mail';
+import { DEFAULT_NOTIFY, deadlineLabel, resultNotice } from '../shared/reminders';
 import { fmtStamp, fmtYMD } from '../shared/dates';
 import {
   addNote, can, cancel, change, confirm, editRequest, FIELD_LABEL, nextAction, resultMissing, startNegotiation, WorkflowError,
@@ -55,6 +56,8 @@ export function DetailPage({ id, from }: { id: string; from?: Route }) {
   // 보낼 안내 메일이 남아 있으면 [메일 보내기]가 다음 할 일
   const primary = pending ? null : nextAction(insp, today);
   const here: Route = { page: 'detail', id: insp.id, from };
+  const resultDays = (data.settings.notify ?? DEFAULT_NOTIFY).resultDays ?? 7;
+  const notice = resultNotice(insp, data.mail_log.items, today, resultDays);
   const btn = (key: 'negotiate' | 'confirm' | 'change', label: string, onClick: () => void) =>
     can(insp, key) && (
       <button key={key} className={`btn${primary === key ? ' btn-primary' : ''}`} type="button" onClick={onClick}>{label}</button>
@@ -100,9 +103,13 @@ export function DetailPage({ id, from }: { id: string; from?: Route }) {
         </div>
         {pending && <Alert kind="info"><b>안내</b> · {MAIL_KIND_LABEL[pending]} 안내 메일이 아직 발송되지 않았습니다.</Alert>}
         {insp.status === 'changed' && <Alert kind="info">일정이 변경되었습니다. 업체와 다시 맞춘 뒤 [재확정]하세요.</Alert>}
-        {resultMissing(insp, today) && tab !== 'result' && (
-          <Alert kind="danger" action={<button className="btn btn-sm" type="button" onClick={() => setTab('result')}>결과 입력</button>}>
-            검수일({fmtYMD(insp.schedule.date)})이 지났는데 결과가 없습니다.
+        {notice && (
+          <Alert kind={notice.daysLeft < 0 ? 'danger' : 'warn'} icon="clock"
+            action={notice.stage === 'noResult'
+              ? (tab !== 'result' && <button className="btn btn-sm" type="button" onClick={() => setTab('result')}>결과 입력</button>)
+              : <button className="btn btn-sm" type="button" onClick={() => go({ page: 'mail', id: insp.id, from: here })}>메일 보내기</button>}>
+            <b>결과 통보 {deadlineLabel(notice)}</b> — 검수일({fmtYMD(notice.inspected)}) 다음날부터 {resultDays}일 안에 업체에 결과를 통보해야 합니다.
+            {notice.stage === 'noResult' ? ' 결과를 입력하고 통보 메일을 보내세요.' : ' 결과는 입력됐고 통보 메일만 남았습니다.'}
           </Alert>
         )}
         {error && <ErrorAlert error={error} />}
@@ -287,7 +294,7 @@ function MailHistory({ mails }: { mails: MailLogEntry[] }) {
             return [
               <tr key={m.id}>
                 <td>{fmtStamp(m.at)}</td>
-                <td>{m.kind === 'test' ? '테스트' : m.kind === 'reminder' ? '검수자 알림' : MAIL_KIND_LABEL[m.kind]}</td>
+                <td>{m.kind === 'test' ? '테스트' : m.kind === 'reminder' ? '검수자 알림' : m.kind === 'resultReminder' ? '결과 통보 요청' : MAIL_KIND_LABEL[m.kind]}</td>
                 <td title={m.to}>{m.to}</td>
                 <td title={m.subject}>{m.subject}</td>
                 <td>{m.method === 'smtp' ? '자동' : '수동'}</td>
