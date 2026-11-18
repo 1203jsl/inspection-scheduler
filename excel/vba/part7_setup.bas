@@ -314,48 +314,49 @@ Private Sub CreateButtons()
     Dim specs As Variant, s As Variant, p() As String, ws As Worksheet, shp As Object
     Dim i As Long, k As Variant, lefts As New Collection, key As String, x As Double, top As Double, h As Double
     ' sheetKey|name|row|widthPt|textKey|macro|style(1=primary)
-    specs = Array( _
-        "home|refresh|3|90|btn.refresh|RefreshAll|1", _
-        "home|import|3|110|btn.import|GoImport|1", _
-        "home|template|3|130|btn.template|MakeVendorTemplate|0", _
-        "home|list|3|90|btn.list|GoList|0", _
-        "home|cal|3|80|btn.cal|GoCalendar|0", _
-        "home|mail|3|80|btn.mail|GoMail|0", _
-        "home|remind|4|140|btn.remind|DraftInspectorReminders|0", _
-        "home|resrem|4|150|btn.resultRemind|DraftResultReminders|0", _
-        "home|vs|4|130|btn.vendorSchedule|MakeVendorSchedule|0", _
-        "home|backup|4|110|btn.backupFolder|OpenBackupFolder|0", _
-        "home|orig|4|120|btn.origFolder|OpenOrigFolder|0", _
-        "list|mail|1|130|btn.mailSel|MailForSelection|1", _
-        "list|detail|1|80|btn.detail|ShowDetailForActive|0", _
-        "list|nego|1|110|btn.nego|AddNegotiation|0", _
-        "list|att|1|90|btn.att|AddAttachment|0", _
-        "list|clear|1|100|btn.clearFilter|ClearFilters|0", _
-        "list|export|1|130|btn.export|ExportVisible|0", _
-        "list|recalc|1|80|btn.recalc|RefreshAll|0", _
-        "list|home|1|70|btn.home|GoHome|0", _
-        "import|pick|1|110|btn.pickFiles|ImportStart|1", _
-        "import|recheck|1|90|btn.recheck|ImportRecheckBtn|0", _
-        "import|commit|1|120|btn.commit|ImportCommit|1", _
-        "import|clear|1|80|btn.clear|ImportClear|0", _
-        "import|home|1|70|btn.home|GoHome|0", _
-        "mail|body|1|90|btn.copyBody|MailCopyBody|1", _
-        "mail|subj|1|90|btn.copySubj|MailCopySubject|0", _
-        "mail|to|1|110|btn.copyTo|MailCopyTo|0", _
-        "mail|web|1|100|btn.webmail|OpenWebmail|0", _
-        "mail|sent|1|120|btn.markSent|MailMarkSent|1", _
-        "mail|clear|1|80|btn.clear|MailClearDraftsBtn|0", _
-        "mail|home|1|70|btn.home|GoHome|0", _
-        "cal|prev|3|80|btn.prev|CalPrev|0", _
-        "cal|today|3|70|btn.today|CalToday|0", _
-        "cal|next|3|80|btn.next|CalNext|0", _
-        "cal|list|3|80|btn.list|GoList|0", _
-        "cal|home|3|70|btn.home|GoHome|0", _
-        "detail|list|3|110|btn.toList|DetailGoList|0", _
-        "detail|nego|3|110|btn.nego|AddNegotiation|0", _
-        "detail|att|3|90|btn.att|AddAttachment|0", _
-        "detail|mail|3|100|btn.mailOne|MailForSelection|1", _
-        "detail|home|3|70|btn.home|GoHome|0")
+    Dim sp As String
+    sp = sp & "home|refresh|3|90|btn.refresh|RefreshAll|1;"
+    sp = sp & "home|import|3|110|btn.import|GoImport|1;"
+    sp = sp & "home|template|3|130|btn.template|MakeVendorTemplate|0;"
+    sp = sp & "home|list|3|90|btn.list|GoList|0;"
+    sp = sp & "home|cal|3|80|btn.cal|GoCalendar|0;"
+    sp = sp & "home|mail|3|80|btn.mail|GoMail|0;"
+    sp = sp & "home|remind|4|140|btn.remind|DraftInspectorReminders|0;"
+    sp = sp & "home|resrem|4|150|btn.resultRemind|DraftResultReminders|0;"
+    sp = sp & "home|vs|4|130|btn.vendorSchedule|MakeVendorSchedule|0;"
+    sp = sp & "home|backup|4|110|btn.backupFolder|OpenBackupFolder|0;"
+    sp = sp & "home|orig|4|120|btn.origFolder|OpenOrigFolder|0;"
+    sp = sp & "list|mail|1|130|btn.mailSel|MailForSelection|1;"
+    sp = sp & "list|detail|1|80|btn.detail|ShowDetailForActive|0;"
+    sp = sp & "list|nego|1|110|btn.nego|AddNegotiation|0;"
+    sp = sp & "list|att|1|90|btn.att|AddAttachment|0;"
+    sp = sp & "list|clear|1|100|btn.clearFilter|ClearFilters|0;"
+    sp = sp & "list|export|1|130|btn.export|ExportVisible|0;"
+    sp = sp & "list|recalc|1|80|btn.recalc|RefreshAll|0;"
+    sp = sp & "list|home|1|70|btn.home|GoHome|0;"
+    sp = sp & "import|pick|1|110|btn.pickFiles|ImportStart|1;"
+    sp = sp & "import|recheck|1|90|btn.recheck|ImportRecheckBtn|0;"
+    sp = sp & "import|commit|1|120|btn.commit|ImportCommit|1;"
+    sp = sp & "import|clear|1|80|btn.clear|ImportClear|0;"
+    sp = sp & "import|home|1|70|btn.home|GoHome|0;"
+    sp = sp & "mail|body|1|90|btn.copyBody|MailCopyBody|1;"
+    sp = sp & "mail|subj|1|90|btn.copySubj|MailCopySubject|0;"
+    sp = sp & "mail|to|1|110|btn.copyTo|MailCopyTo|0;"
+    sp = sp & "mail|web|1|100|btn.webmail|OpenWebmail|0;"
+    sp = sp & "mail|sent|1|120|btn.markSent|MailMarkSent|1;"
+    sp = sp & "mail|clear|1|80|btn.clear|MailClearDraftsBtn|0;"
+    sp = sp & "mail|home|1|70|btn.home|GoHome|0;"
+    sp = sp & "cal|prev|3|80|btn.prev|CalPrev|0;"
+    sp = sp & "cal|today|3|70|btn.today|CalToday|0;"
+    sp = sp & "cal|next|3|80|btn.next|CalNext|0;"
+    sp = sp & "cal|list|3|80|btn.list|GoList|0;"
+    sp = sp & "cal|home|3|70|btn.home|GoHome|0;"
+    sp = sp & "detail|list|3|110|btn.toList|DetailGoList|0;"
+    sp = sp & "detail|nego|3|110|btn.nego|AddNegotiation|0;"
+    sp = sp & "detail|att|3|90|btn.att|AddAttachment|0;"
+    sp = sp & "detail|mail|3|100|btn.mailOne|MailForSelection|1;"
+    sp = sp & "detail|home|3|70|btn.home|GoHome|0;"
+    specs = Split(Left$(sp, Len(sp) - 1), ";")
     ' remove old buttons
     For Each k In Array("home", "list", "import", "mail", "cal", "detail")
         Set ws = SheetOf(CStr(k))

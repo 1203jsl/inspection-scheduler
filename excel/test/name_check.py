@@ -26,5 +26,14 @@ for nm, params, body in procs:
         if l.lower() in globals_:
             print(f'{nm}: local "{l}" shadows module variable')
             bad += 1
+run = 0
+for i, l in enumerate(open(os.path.join(here, '..', 'vba', 'modInspection.bas')).read().split('\n'), 1):
+    if l.rstrip().endswith(' _'):
+        run += 1
+    else:
+        if run > 20:
+            print(f'line {i}: {run} line continuations (VBA allows 24)')
+            bad += 1
+        run = 0
 print('shadowing problems:', bad)
 sys.exit(1 if bad else 0)
