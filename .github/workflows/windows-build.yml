@@ -39,8 +39,13 @@ jobs:
           $setup = "release\InspectionScheduler-Setup-$ver.exe"
           $p = Start-Process -FilePath $setup -ArgumentList '/S' -Wait -PassThru
           if ($p.ExitCode -ne 0) { throw "설치 실패 (종료 코드 $($p.ExitCode))" }
-          $exe = "$env:LOCALAPPDATA\Programs\InspectionScheduler\InspectionScheduler.exe"
-          if (!(Test-Path $exe)) { throw "설치된 실행 파일이 없습니다: $exe" }
+          # 모든 사용자용 설치: C:\Program Files\InspectionScheduler (클라우드독 허용 등록용 고정 경로)
+          $exe = "$env:ProgramFiles\InspectionScheduler\InspectionScheduler.exe"
+          if (!(Test-Path $exe)) {
+            Get-ChildItem "$env:ProgramFiles", "$env:LOCALAPPDATA\Programs" -Filter InspectionScheduler.exe -Recurse -Depth 2 -ErrorAction SilentlyContinue | ForEach-Object { "찾은 위치: $($_.FullName)" }
+            throw "설치된 실행 파일이 없습니다: $exe"
+          }
+          "설치 위치: $exe"
           "INSTALLED_EXE=$exe" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
 
       - name: 실행 시험 (설치된 프로그램으로 첫 실행 → 엑셀 가져오기)

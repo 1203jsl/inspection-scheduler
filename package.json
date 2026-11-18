@@ -1,7 +1,7 @@
 {
   "name": "inspection-scheduler",
   "productName": "검수일정 관리",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "description": "외주업체 검수일정 관리 (Windows)",
   "main": "dist/main/main.js",
   "private": true,
@@ -65,8 +65,8 @@
     },
     "nsis": {
       "oneClick": false,
-      "perMachine": false,
-      "allowToChangeInstallationDirectory": true,
+      "perMachine": true,
+      "allowToChangeInstallationDirectory": false,
       "createDesktopShortcut": true,
       "createStartMenuShortcut": true,
       "shortcutName": "검수일정 관리",
