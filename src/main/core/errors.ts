@@ -18,8 +18,10 @@ export function noPermission(file: string): AppError {
   return new AppError(
     'NO_PERMISSION',
     `이 폴더에 파일을 저장할 권한이 없습니다: ${file}\n` +
-      '회사 보안(문서중앙화·클라우드독) 정책이 이 형식의 파일을 막았을 수 있습니다. ' +
-      '같은 폴더에 메모장으로 test.json 파일을 만들어 저장되는지 확인해 보시고, 안 되면 IT 담당자에게 .json 파일 저장 허용을 요청하세요.',
+      '회사 보안 프로그램(문서중앙화·DRM)이 허용 목록에 없는 프로그램의 저장을 막았을 수 있습니다. ' +
+      '메모장 등 다른 프로그램으로는 이 폴더에 저장되는데 이 프로그램만 안 되면, ' +
+      'IT 담당자에게 \'검수일정 관리(InspectionScheduler.exe)\'의 저장 허용을 요청하세요. ' +
+      'Windows 보안의 \'제어된 폴더 액세스\' 알림이 떴다면 그곳에서 허용해도 됩니다.',
     { path: file },
   );
 }
